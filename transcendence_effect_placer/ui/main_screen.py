@@ -491,9 +491,13 @@ class SpriteViewer:
             x = int(self.pos_x_entry.get())
             y = int(self.pos_y_entry.get())
 
-            self._points[selected_index[0]].update_from_projection(ICoord(x, y), 0)
+            i = selected_index[0]
+
+            point = self._points[i]
+            point.update_from_projection(ICoord(x, y), 0)
             coordinates_listbox.delete(selected_index)
-            coordinates_listbox.insert(END, f"({x}, {y})")
+            coordinates_listbox.insert(i, str(point))
+            self.display_sprite()
 
         update_button = tk.Button(entry_frame, text="Update", command=update_coordinates)
         update_button.pack(side=LEFT)
@@ -505,7 +509,7 @@ class SpriteViewer:
             coord = ICoord(x, y)
             point = PointGeneric(coord, str(len(self._points)), self._sprite_cfg, self._rot_slider.get())
             self._points.append(point)
-            coordinates_listbox.insert(END, str(coord))
+            coordinates_listbox.insert(END, str(point))
             self.display_sprite()
 
         self._image_display.bind("<Button-1>", add_coordinate)
