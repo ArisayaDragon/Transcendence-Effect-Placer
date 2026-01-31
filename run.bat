@@ -1,0 +1,1 @@
+python -m transcendence_effect_placer.main
