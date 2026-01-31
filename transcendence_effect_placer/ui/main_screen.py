@@ -416,7 +416,7 @@ class SpriteViewer:
         file_menu = tk.Menu(menubar, tearoff=0)
         file_menu.add_command(label="Load", command=self.load_image)
         file_menu.add_command(label="Change Sprite Parameters", command=self.load_sprite_cfg)
-        file_menu.add_command(label="Export")
+        file_menu.add_command(label="Export", command=self.export)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self._root.quit)
         menubar.add_cascade(label="File", menu=file_menu)
