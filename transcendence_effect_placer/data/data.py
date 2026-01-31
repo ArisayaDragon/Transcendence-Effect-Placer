@@ -22,12 +22,15 @@ class SpriteConfig:
     
     def rot_y(self, rotation: int = 0):
         return rotation % self.rot_col_size()
+    
+    def viewport_size(self):
+        return max(1, self.w / (2.0 * self.viewport_ratio))
 
     def frame(self, rotation: int = 0, anim: int = 0) -> ICoord:
         rot_col = self.rot_x(rotation)
         rot_pos = self.rot_y(rotation)
-        anim_x = anim * self.w
-        rot_x = rot_col * self.w * (self.anim_frames + 1)
+        anim_x = anim * self.w * self.rot_cols
+        rot_x = rot_col * self.w
         rot_y = rot_pos * self.h
         x = self.x + anim_x + rot_x
         y = self.y + rot_y
@@ -38,14 +41,23 @@ class CCoord:
     x: float = 0.0
     y: float = 0.0
     z: float = 0.0
+    
+    def __str__(self) -> str:
+        return f"({self.x},{self.y},{self.z})"
 
 @dataclass
 class ICoord:
     x: int = 0
     y: int = 0
+    
+    def __str__(self) -> str:
+        return f"({self.x},{self.y})"
 
 @dataclass
 class PCoord:
     dir: float = 0.0
     rad: float = 0.0
     z: float = 0.0
+    
+    def __str__(self) -> str:
+        return f"({self.dir} radians,{self.rad},{self.z})"

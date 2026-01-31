@@ -10,6 +10,9 @@ class SpriteSettingsDialogue:
         self._sprite_cfg = SpriteConfig()
         self._wnd: Toplevel|None = None
 
+    def is_open(self):
+        return not self._wnd is None
+
     def open_dialogue(self, defaults: SpriteConfig|None = None):
         defaults = self._sprite_cfg if defaults is None else defaults
 
@@ -77,10 +80,12 @@ class SpriteSettingsDialogue:
             self._sprite_cfg.viewport_ratio = float(self.viewport_ratio_entry.get())
             self._sprite_cfg.real = True
 
+            if self._wnd is None: return
             self._wnd.destroy()
             self._wnd = None
 
         def cancel():
+            if self._wnd is None: return
             self._wnd.destroy()
             self._wnd = None
 
@@ -90,3 +95,5 @@ class SpriteSettingsDialogue:
 
         self.accept_button = tk.Button(self._wnd, text="Cancel", command=cancel)
         self.accept_button.grid(row=c, column=0, columnspan=2)
+
+        self._root.wait_window(self._wnd)
