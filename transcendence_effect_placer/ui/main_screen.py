@@ -1,6 +1,6 @@
 from __future__ import annotations
 import tkinter as tk
-from tkinter import LEFT, RIGHT, TOP, BOTTOM, X, Y, VERTICAL, HORIZONTAL, BOTH, Toplevel, Tk, Scale, Label
+from tkinter import LEFT, RIGHT, TOP, BOTTOM, X, Y, VERTICAL, HORIZONTAL, BOTH, END, Toplevel, Tk, Scale, Label
 from tkinter import filedialog, messagebox
 from abc import ABC, abstractmethod
 from PIL import ImageTk
@@ -493,7 +493,7 @@ class SpriteViewer:
 
             self._points[selected_index[0]].update_from_projection(ICoord(x, y), 0)
             coordinates_listbox.delete(selected_index)
-            coordinates_listbox.insert(tk.END, f"({x}, {y})")
+            coordinates_listbox.insert(END, f"({x}, {y})")
 
         update_button = tk.Button(entry_frame, text="Update", command=update_coordinates)
         update_button.pack(side=LEFT)
@@ -505,7 +505,7 @@ class SpriteViewer:
             coord = ICoord(x, y)
             point = PointGeneric(coord, str(len(self._points)), self._sprite_cfg, self._rot_slider.get())
             self._points.append(point)
-            coordinates_listbox.insert(tk.END, str(coord))
+            coordinates_listbox.insert(END, str(coord))
             self.display_sprite()
 
         self._image_display.bind("<Button-1>", add_coordinate)
