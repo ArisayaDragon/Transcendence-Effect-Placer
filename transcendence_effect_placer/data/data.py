@@ -61,3 +61,15 @@ class PCoord:
     
     def __str__(self) -> str:
         return f"({self.dir} radians,{self.rad},{self.z})"
+    
+    def dir_deg(self) -> float:
+        return math.degrees(self.rad)
+    
+    def dir_i360(self) -> float:
+        return round(math.degrees(self.rad)) % 360
+    
+    def dir_i180(self) -> float:
+        dir = self.dir_i360()
+        if dir <= 180:
+            return dir
+        return dir - 360

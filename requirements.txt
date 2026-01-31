@@ -1,4 +1,3 @@
 numpy
 pillow
 dataclasses
-tkinter-async-execute
