@@ -36,11 +36,16 @@ class Point(ABC):
     point_type: PointType = _PT_GENERIC
     color = (0,255,0,255)
 
-    def __init__(self, coord: ICoord, label: str, sprite_cfg: SpriteConfig):
+    def __init__(self, coord: ICoord, label: str, sprite_cfg: SpriteConfig, rot_frame: int):
         self.label = label
         self.projection_coord = coord
+        print(self.projection_coord)
         self._cfg = sprite_cfg
-        self.polar_coord = convert_projection_to_polar(self._cfg, coord)
+        self.polar_coord = convert_projection_to_polar(self._cfg, coord, rot_frame)
+        print(self.polar_coord)
+        if rot_frame:
+            self.projection_coord = convert_polar_to_projection(self._cfg, self.polar_coord)
+            print('rotationally corrected pos:', self.projection_coord)
         self.mirror_x = False #mirrors left-right
         self.mirror_y = False #mirrors front-back
 
@@ -48,9 +53,12 @@ class Point(ABC):
         self.polar_coord = coord
         self.projection_coord = convert_polar_to_projection(self._cfg, coord)
 
-    def update_from_projection(self, coord: ICoord):
-        self.projection_coord = coord
-        self.polar_coord = convert_projection_to_polar(self._cfg, coord)
+    def update_from_projection(self, coord: ICoord, rot_frame: int):
+        self.polar_coord = convert_projection_to_polar(self._cfg, coord, rot_frame)
+        if rot_frame:
+            self.projection_coord = convert_polar_to_projection(self._cfg, self.polar_coord, rot_frame)
+        else:
+            self.projection_coord = coord
 
     def pil_coord(self, coord: ICoord) -> ICoord:
         return ICoord(coord.x + round(self._cfg.w/2), coord.y + round(self._cfg.h/2))
@@ -142,7 +150,7 @@ class PointThuster(Point):
     point_type = _PT_THRUSTER
     color = (255,255,0,255)
 
-    def __init__(self, coord: ICoord, label: str, sprite_cfg: SpriteConfig, direction: int = 0):
+    def __init__(self, coord: ICoord, label: str, sprite_cfg: SpriteConfig, rot_frame: int, direction: int = 0):
         '''
         Docstring for __init__
         
@@ -155,7 +163,7 @@ class PointThuster(Point):
         :param direction: direction thruster is facing (in degrees)
         :type direction: int
         '''
-        super().__init__(coord, label, sprite_cfg)
+        super().__init__(coord, label, sprite_cfg, rot_frame)
         self.direction = direction
         self.under_over = [0 for i in range(sprite_cfg.rot_frames)]
 
@@ -238,8 +246,8 @@ class PointDevice(Point):
     color = (255,0,255,255)
     color_arc = (255,0,0,255)
 
-    def __init__(self, coord: ICoord, label: str, sprite_cfg: SpriteConfig, direction: int = 0, arc: int = -1, arc_start: int=-1, arc_end: int=-1):
-        super().__init__(coord, label, sprite_cfg)
+    def __init__(self, coord: ICoord, label: str, sprite_cfg: SpriteConfig, rot_frame: int, direction: int = 0, arc: int = -1, arc_start: int=-1, arc_end: int=-1):
+        super().__init__(coord, label, sprite_cfg, rot_frame)
         self.direction = direction
         self.arc_start = arc_start
         self.arc_end = arc_end
@@ -483,7 +491,7 @@ class SpriteViewer:
             x = int(self.pos_x_entry.get())
             y = int(self.pos_y_entry.get())
 
-            self._points[selected_index[0]].update_from_projection(ICoord(x, y))
+            self._points[selected_index[0]].update_from_projection(ICoord(x, y), 0)
             coordinates_listbox.delete(selected_index)
             coordinates_listbox.insert(tk.END, f"({x}, {y})")
 
@@ -495,7 +503,7 @@ class SpriteViewer:
             y = event.y - self._sprite_cfg.h // 2
             
             coord = ICoord(x, y)
-            point = PointGeneric(coord, str(len(self._points)), self._sprite_cfg)
+            point = PointGeneric(coord, str(len(self._points)), self._sprite_cfg, self._rot_slider.get())
             self._points.append(point)
             coordinates_listbox.insert(tk.END, str(coord))
             self.display_sprite()

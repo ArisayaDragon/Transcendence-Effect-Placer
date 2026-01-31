@@ -8,7 +8,6 @@ _K1 = math.sin(_VIEW_ANGLE)
 _K2 = math.cos(_VIEW_ANGLE)
 _MIN_ZG = 0.1
 _D = 2.0
-_MIN_DEN = 0.1
 
 def convert_polar_to_projection(sprite_cfg: SpriteConfig, coord: PCoord) -> ICoord:
     scale = sprite_cfg.viewport_size()
@@ -32,21 +31,12 @@ def convert_polar_to_projection(sprite_cfg: SpriteConfig, coord: PCoord) -> ICoo
 
     return ICoord(int(xg / den), int(yg / den))
 
-def convert_projection_to_polar(sprite_cfg: SpriteConfig, coord: CCoord|ICoord) -> PCoord:
+def convert_projection_to_polar(sprite_cfg: SpriteConfig, coord: CCoord|ICoord, rotation_frame: int = 0) -> PCoord:
     if isinstance(coord, ICoord):
         coord = CCoord(float(coord.x), float(coord.y), 0)
 
-    scale = sprite_cfg.viewport_size()
+    rotation_offset = rotation_frame * (360 / sprite_cfg.rot_frames)
 
-    z = coord.z * -1 / scale
-    d = _D * scale
-
-    den = coord.y * _K1 - d * _K2
-    if den < _MIN_DEN:
-        den = _MIN_DEN
-    
-    y = (-(z * _K1 * d) - (coord.y * z * _K2) - (2.0 * coord.y))/den
-    yg = y * _K2 - z * _K1
-    x = coord.x * yg / coord.y if coord.y else coord.x / scale
-
-    return PCoord(math.atan2(x, y), (x*x + y*y) ** 0.5, 0)
+    cx = coord.x
+    cy = coord.y
+    return PCoord(math.atan2(cy, cx) - math.radians(rotation_offset), (cx*cx + cy*cy) ** 0.5, 0)
