@@ -52,4 +52,4 @@ def convert_projection_to_polar(sprite_cfg: SpriteConfig, coord: CCoord|ICoord, 
 
     cx = coord.x
     cy = coord.y
-    return PCoord(math.atan2(-1 * y, -1 * x) - math.radians(rotation_offset), (cx*cx + cy*cy) ** 0.5, 0)
+    return PCoord(math.atan2(y, x) - math.radians(rotation_offset), (cx*cx + cy*cy) ** 0.5, 0)

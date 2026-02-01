@@ -665,8 +665,8 @@ class SpriteViewer:
         self.display_sprite()
 
     def add_point(self, event: Event[Label]):
-        x = event.x - self._sprite_cfg.w // 2
-        y = event.y - self._sprite_cfg.h // 2
+        x = event.x - self._sprite_cfg.w // 2 #use floor division since the game probably does too
+        y = -1 * (event.y - self._sprite_cfg.h // 2) #positive y is to the top of the image
         
         coord = ICoord(x, y)
         point = PointGeneric(coord, str(len(self._points)), self._sprite_cfg, self.get_cur_rot_frame())
