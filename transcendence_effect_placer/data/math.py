@@ -37,19 +37,24 @@ def convert_projection_to_polar(sprite_cfg: SpriteConfig, coord: CCoord|ICoord, 
         coord = CCoord(float(coord.x), float(coord.y), 0)
     scale = sprite_cfg.viewport_size()
 
-    z = coord.z * -1 / scale
+    px = coord.x
+    py = coord.y
+    pz = coord.z
+
+    z = pz * -1 / scale
     d = _D * scale
 
-    den = coord.y * _K1 - d * _K2
+    den = py * _K1 - d * _K2
     if den < _MIN_DEN:
         den = _MIN_DEN
 
-    y = (-(z * _K1 * d) - (coord.y * z * _K2) - (2.0 * coord.y))/den
+    y = (-(z * _K1 * d) - (py * z * _K2) - (2.0 * py))/den
     yg = y * _K2 - z * _K1
-    x = coord.x * yg / coord.y if coord.y else coord.x / scale
+    x = px * yg / py if py else px / scale
 
     rotation_offset = rotation_frame * (360 / sprite_cfg.rot_frames)
 
-    cx = coord.x
-    cy = coord.y
-    return PCoord(math.atan2(y, x) - math.radians(rotation_offset), (cx*cx + cy*cy) ** 0.5, 0)
+    ox = x * scale
+    oy = y * scale
+    print("conversion:", py, y, oy, px, x, ox, scale)
+    return PCoord(math.atan2(oy, ox) - math.radians(rotation_offset), (ox*ox + oy*oy) ** 0.5, 0)
