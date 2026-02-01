@@ -220,12 +220,15 @@ class SpriteViewer:
 
         self.iv_mirror_x = IntVar()
         self.iv_mirror_y = IntVar()
+        self.iv_mirror_z = IntVar()
 
-        self.mirror_x_check = Checkbutton(self.update_point_frame, text="Mirror X", variable=self.iv_mirror_x, command=self.update_point, state=DISABLED)
-        self.mirror_y_check = Checkbutton(self.update_point_frame, text="Mirror Y", variable=self.iv_mirror_y, command=self.update_point, state=DISABLED)
+        self.mirror_x_check = Checkbutton(self.update_point_frame, text="Mirror X", variable=self.iv_mirror_x, command=self.update_point_mirror, state=DISABLED)
+        self.mirror_y_check = Checkbutton(self.update_point_frame, text="Mirror Y", variable=self.iv_mirror_y, command=self.update_point_mirror, state=DISABLED)
+        self.mirror_z_check = Checkbutton(self.update_point_frame, text="Mirror Z", variable=self.iv_mirror_z, command=self.update_point_mirror, state=DISABLED)
 
         self.mirror_x_check.grid(row=r, column=0)
-        self.mirror_y_check.grid(row=r, column=2)
+        self.mirror_y_check.grid(row=r, column=1)
+        self.mirror_z_check.grid(row=r, column=2)
 
         r += 1
 
@@ -254,7 +257,7 @@ class SpriteViewer:
         self.pos_arc_st_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_arc_st, state=DISABLED)
         self.sv_pos_arc_st.trace_add(SV_WRITE, make_sv_callback(self.sv_pos_arc_st, self.pos_arc_st_entry, validate_numeral))
 
-        pos_arc_en_label = Label(self.update_point_frame, text="Arc")
+        pos_arc_en_label = Label(self.update_point_frame, text="Arc End")
 
         self.sv_pos_arc_en = StringVar()
         self.pos_arc_en_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_arc_en, state=DISABLED)
@@ -363,6 +366,8 @@ class SpriteViewer:
         print(export_str)
 
     def reset_point_controls(self):
+        i = self._selected_idx
+        self._selected_idx = -1
         self.sv_point_type.set(PT_GENERIC)
         self.point_type_device.configure(state = DISABLED)
         self.point_type_thruster.configure(state = DISABLED)
@@ -394,9 +399,14 @@ class SpriteViewer:
         self.pos_arc_en_entry.configure(fg=BLACK)
         self.pos_arc_en_entry.delete(0, END)
         self.pos_arc_en_entry.configure(state=DISABLED)
+        self.mirror_x_check.deselect()
         self.mirror_x_check.configure(state=DISABLED)
+        self.mirror_y_check.deselect()
         self.mirror_y_check.configure(state=DISABLED)
+        self.mirror_z_check.deselect()
+        self.mirror_z_check.configure(state=DISABLED)
         self.delete_button.configure(state=DISABLED)
+        self._selected_idx = i
 
     def get_cur_rot_frame(self) -> int:
         if self._mode == _MODE_STATION or self._rot_slider is None:
@@ -470,19 +480,22 @@ class SpriteViewer:
             self.pos_arc_st_entry.configure(state = DISABLED)
             self.pos_arc_en_entry.configure(state = DISABLED)
 
-        print(point.mirror_x, point.mirror_y)
-        self.iv_mirror_x = 1 if point.mirror_x else 0
-        self.iv_mirror_y = 1 if point.mirror_y else 0
-        if point.mirror_x:
+        print(point.mirror.x, point.mirror.y, point.mirror.z)
+        if point.mirror.x:
             self.mirror_x_check.select()
         else:
             self.mirror_x_check.deselect()
-        if point.mirror_y:
+        if point.mirror.y:
             self.mirror_y_check.select()
         else:
             self.mirror_y_check.deselect()
-        self.mirror_x_check.configure(state=NORMAL)
-        self.mirror_y_check.configure(state=NORMAL)
+        if point.mirror.z:
+            self.mirror_z_check.select()
+        else:
+            self.mirror_z_check.deselect()
+        self.mirror_x_check.configure(state=NORMAL if point.mirror_support.x else DISABLED)
+        self.mirror_y_check.configure(state=NORMAL if point.mirror_support.y else DISABLED)
+        self.mirror_z_check.configure(state=NORMAL if point.mirror_support.z else DISABLED)
 
         self.delete_button.configure(state=NORMAL)
 
@@ -533,11 +546,33 @@ class SpriteViewer:
         z = int(zs)
 
         point: Point = self._points[i]
-        point.set_mirror_x(bool(self.iv_mirror_x))
-        point.set_mirror_y(bool(self.iv_mirror_y))
         point.update_from_projection(ICoord(x, y), z)
         self.points_listbox.delete(i)
         self.points_listbox.insert(i, str(point))
+
+        self.display_sprite()
+
+    def update_point_mirror(self, event: Event|None = None):
+        #the index is actually a tuple of all selected items in the list
+        #but our list only selects 1 so it doesnt matter
+        selected_index = self.points_listbox.curselection()
+        if not selected_index:
+            i = self._selected_idx
+        else:
+            #we can only edit one at a time, so we only take the first
+            i = selected_index[0]
+        if i < 0:
+            print("no valid index selected")
+            return
+        
+        m_x = bool(self.iv_mirror_x.get())
+        m_y = bool(self.iv_mirror_y.get())
+        m_z = bool(self.iv_mirror_z.get())
+
+        point: Point = self._points[i]
+        point.set_mirror_x(m_x)
+        point.set_mirror_y(m_y)
+        point.set_mirror_z(m_z)
 
         self.display_sprite()
 

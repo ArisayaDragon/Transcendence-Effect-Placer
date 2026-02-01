@@ -6,11 +6,20 @@ import PIL
 from PIL.ImageFile import ImageFile
 from PIL.ImageDraw import ImageDraw
 from PIL.Image import Image
+from dataclasses import dataclass
 
 from transcendence_effect_placer.data.data import SpriteConfig, CCoord, ICoord, PCoord
 from transcendence_effect_placer.data.math import convert_polar_to_projection, convert_projection_to_polar
 from transcendence_effect_placer.ui.load_file import SpriteOpener
 from transcendence_effect_placer.ui.sprite_settings import SpriteSettingsDialogue
+
+@dataclass
+class MirrorOptions:
+    x: bool = False
+    y: bool = False
+    z: bool = False
+
+MIRROR_NULL = MirrorOptions()
 
 class PointType(str): pass
 
@@ -22,6 +31,7 @@ PT_GENERIC = PointType("Generic")
 class Point(ABC):
     point_type: PointType = PT_GENERIC
     color = (0,255,0,255)
+    mirror_support = MirrorOptions(0,0,0)
 
     def __init__(self, coord: ICoord, label: str, sprite_cfg: SpriteConfig, rot_frame: int):
         self.label = label
@@ -33,8 +43,7 @@ class Point(ABC):
         if rot_frame:
             self.projection_coord = convert_polar_to_projection(self._cfg, self.polar_coord)
             print('rotationally corrected pos:', self.projection_coord)
-        self.mirror_x = False #mirrors left-right
-        self.mirror_y = False #mirrors front-back
+        self.mirror = MirrorOptions()
 
     def update_from_polar(self, coord: PCoord):
         self.polar_coord = coord
@@ -54,10 +63,13 @@ class Point(ABC):
         return str(self.point_type) + ' ' + self.label + ': ' + repr(self.projection_coord)
     
     def set_mirror_x(self, mirror=True):
-        self.mirror_x = mirror
+        self.mirror.x = mirror
     
     def set_mirror_y(self, mirror=True):
-        self.mirror_y = mirror
+        self.mirror.y = mirror
+
+    def set_mirror_z(self, mirror=True):
+        self.mirror.z = mirror
 
     def set_z(self, z:int = 0):
         self.polar_coord.z = z
@@ -83,8 +95,27 @@ class Point(ABC):
         self.projection_coord.y = y
         self.update_from_projection(self.projection_coord)
 
-    def get_projection_coord_at_direction(self, direction: int = 0) -> ICoord:
-        adjusted_direction = PCoord(self.polar_coord.dir + math.radians(direction), self.polar_coord.rad, self.polar_coord.z)
+    def _mirror_angle_degrees(self, degrees: float, mirror: MirrorOptions) -> float:
+        if degrees > 180:
+            degrees -= 360
+        if mirror.x:
+            degrees *= -1
+        if mirror.y:
+            if degrees >= 0:
+                degrees -= 180
+            else:
+                degrees += 180
+            degrees *= -1
+        return degrees
+
+
+    def get_projection_coord_at_direction(self, direction: int = 0, mirror: MirrorOptions = MIRROR_NULL) -> ICoord:
+        adj_dir_deg = math.degrees(self.polar_coord.dir) + direction % 360
+        adj_dir_deg = self._mirror_angle_degrees(adj_dir_deg, mirror)
+        adj_dir = math.radians(adj_dir_deg)
+        adj_rad = self.polar_coord.rad
+        adj_z = self.polar_coord.z * (-1 if mirror.z else 1)
+        adjusted_direction = PCoord(adj_dir, adj_rad, adj_z)
         return self.pil_coord(convert_polar_to_projection(self._cfg, adjusted_direction))
     
     @abstractmethod
@@ -95,8 +126,30 @@ class Point(ABC):
     def render_to_image(self, image: ImageDraw, rotation_dir: int):
         pass
 
-    def _render_point(self, image:ImageDraw, direction: int = 0) -> ICoord:
-        coord = self.get_projection_coord_at_direction(direction)
+    def _get_mirror_options(self) -> list[MirrorOptions]:
+        ret: list[MirrorOptions] = []
+        ret.append(MIRROR_NULL) #always render self
+        x = self.mirror.x and self.mirror_support.x
+        y = self.mirror.y and self.mirror_support.y
+        z = self.mirror.z and self.mirror_support.z
+        if z:
+            ret.append(MirrorOptions(0,0,1))
+        if y:
+            ret.append(MirrorOptions(0,1,0))
+        if y and z:
+            ret.append(MirrorOptions(0,1,1))
+        if x:
+            ret.append(MirrorOptions(1,0,0))
+        if x and z:
+            ret.append(MirrorOptions(1,0,1))
+        if x and y:
+            ret.append(MirrorOptions(1,1,0))
+        if x and y and z:
+            ret.append(MirrorOptions(1,1,1))
+        return ret
+
+    def _render_point(self, image:ImageDraw, direction: int = 0, mirror: MirrorOptions = MIRROR_NULL) -> ICoord:
+        coord = self.get_projection_coord_at_direction(direction, mirror)
         image.circle((coord.x, coord.y), 2, self.color)
         return coord
         
@@ -109,14 +162,15 @@ class PointGeneric(Point):
 class PointDock(Point):
     point_type = PT_DOCK
     color = (0,0,255,255)
+    mirror_support = MirrorOptions(1,1,0)
     
     def to_xml(self):
         ret = f'<Port x="{self.projection_coord.x}"\ty="{self.projection_coord.y}"/>'
-        if self.mirror_x:
+        if self.mirror.x:
             ret += f'\n<Port x="{self.projection_coord.x * -1}"\ty="{self.projection_coord.y}"/>'
-        if self.mirror_y:
+        if self.mirror.y:
             ret += f'\n<Port x="{self.projection_coord.x}"\ty="{self.projection_coord.y * -1}"/>'
-        if self.mirror_x and self.mirror_y:
+        if self.mirror.x and self.mirror.y:
             ret += f'\n<Port x="{self.projection_coord.x * -1}"\ty="{self.projection_coord.y * -1}"/>'
         return ret
     
@@ -128,11 +182,14 @@ class PointDock(Point):
         :param image: Description
         :param rotation_dir: igmored for Docking points because they dont rotate
         '''
-        self._render_point(image, 0)
+        mirrors = self._get_mirror_options()
+        for mirror in mirrors:
+            self._render_point(image, 0, mirror)
     
 class PointThuster(Point):
     point_type = PT_THRUSTER
     color = (255,255,0,255)
+    mirror_support = MirrorOptions(1,0,1)
 
     def __init__(self, coord: ICoord, label: str, sprite_cfg: SpriteConfig, rot_frame: int, direction: int = 0):
         '''
@@ -202,33 +259,37 @@ class PointThuster(Point):
 
     def to_xml(self):
         ret = f'<Effect type="thrustMain"\t\tposAngle="{self.polar_coord.dir_i360()}"\tposRadius="{round(self.polar_coord.rad)}"\tposZ="{round(self.polar_coord.z)}"\trotation="{self.direction}"\teffect="&efMainThrusterLarge;"{self.get_send_to_back()}{self.get_bring_to_front()}/>'
-        if self.mirror_x:
+        if self.mirror.x:
             ret += f'<Effect type="thrustMain"\t\tposAngle="-{self.polar_coord.dir_i360()}"\tposRadius="{round(self.polar_coord.rad)}"\tposZ="{round(self.polar_coord.z)}"\trotation=-{self.direction}"\teffect="&efMainThrusterLarge;"{self.get_send_to_back()}{self.get_bring_to_front()}/>'
         #thrusters dont need y-mirroring
         return ret
     
-    def _render_arc(self, image: ImageDraw, direction: int = 0):
-        pos = self.get_projection_coord_at_direction(direction)
-        pil_thrust_anngle = (self.direction + direction + 90) % 360
+    def _render_arc(self, image: ImageDraw, direction: int = 0, mirror: MirrorOptions = MIRROR_NULL):
+        pos = self.get_projection_coord_at_direction(direction, mirror)
+        pil_thrust_angle = (self.direction + direction + 90) % 360
+        pil_thrust_angle = round(self._mirror_angle_degrees(pil_thrust_angle, mirror))
         c=3
-        image.arc((pos.x-c, pos.y-c, pos.x+c, pos.y+c), pil_thrust_anngle, pil_thrust_anngle, fill=self.color)
+        image.arc((pos.x-c, pos.y-c, pos.x+c, pos.y+c), pil_thrust_angle-1, pil_thrust_angle+1, fill=self.color)
         c+=1
-        image.arc((pos.x-c, pos.y-c, pos.x+c, pos.y+c), pil_thrust_anngle, pil_thrust_anngle, fill=self.color)
+        image.arc((pos.x-c, pos.y-c, pos.x+c, pos.y+c), pil_thrust_angle-1, pil_thrust_angle+1, fill=self.color)
         c+=1
-        image.arc((pos.x-c, pos.y-c, pos.x+c, pos.y+c), pil_thrust_anngle, pil_thrust_anngle, fill=self.color)
+        image.arc((pos.x-c, pos.y-c, pos.x+c, pos.y+c), pil_thrust_angle-1, pil_thrust_angle+1, fill=self.color)
         c+=1
-        image.arc((pos.x-c, pos.y-c, pos.x+c, pos.y+c), pil_thrust_anngle, pil_thrust_anngle, fill=self.color)
+        image.arc((pos.x-c, pos.y-c, pos.x+c, pos.y+c), pil_thrust_angle-1, pil_thrust_angle+1, fill=self.color)
         c+=1
-        image.arc((pos.x-c, pos.y-c, pos.x+c, pos.y+c), pil_thrust_anngle, pil_thrust_anngle, fill=self.color)
+        image.arc((pos.x-c, pos.y-c, pos.x+c, pos.y+c), pil_thrust_angle-1, pil_thrust_angle+1, fill=self.color)
     
     def render_to_image(self, image, rotation_dir):
-        self._render_point(image, rotation_dir)
-        self._render_arc(image, rotation_dir)
+        mirrors = self._get_mirror_options()
+        for mirror in mirrors:
+            self._render_point(image, rotation_dir, mirror)
+            self._render_arc(image, rotation_dir, mirror)
     
 class PointDevice(Point):
     point_type = PT_DEVICE
     color = (255,0,255,255)
     color_arc = (255,0,0,255)
+    mirror_support = MirrorOptions(1,1,1)
 
     def __init__(self, coord: ICoord, label: str, sprite_cfg: SpriteConfig, rot_frame: int, direction: int = 0, arc: int = -1, arc_start: int=-1, arc_end: int=-1):
         super().__init__(coord, label, sprite_cfg, rot_frame)
@@ -272,9 +333,12 @@ class PointDevice(Point):
             end = -1
         return (direction, start, end)
     
-    def _render_arc(self, image: ImageDraw, direction: int):
-        pos = self.get_projection_coord_at_direction(direction)
+    def _render_arc(self, image: ImageDraw, direction: int, mirror: MirrorOptions = MIRROR_NULL):
+        pos = self.get_projection_coord_at_direction(direction, mirror)
         aim_dir, start, end = self.get_arc_at_dir(direction)
+        aim_dir = round(self._mirror_angle_degrees(aim_dir, mirror))
+        start = round(self._mirror_angle_degrees(start, mirror))
+        end = round(self._mirror_angle_degrees(end, mirror))
         image.arc((pos.x-5, pos.y-5, pos.x+5, pos.y+5), (90+start) % 360, (90+end) % 360, fill=self.color_arc)
         image.arc((pos.x-7, pos.y-7, pos.x+7, pos.y+7), (90+aim_dir) % 360, (90+aim_dir) % 360, fill=self.color)
 
@@ -283,11 +347,13 @@ class PointDevice(Point):
 
     def to_xml(self):
         ret = f'<DeviceSlot id="{self.label}"\t\tposAngle="{self.polar_coord.dir_i360()}"\tposRadius="{round(self.polar_coord.rad)}"\tposZ="{round(self.polar_coord.z)}"\tfireAngle="{self.direction}"\t{self.get_arc_xml()}/>'
-        if self.mirror_x:
+        if self.mirror.x:
             ret += f'<DeviceSlot id="{self.label}"\t\tposAngle="-{self.polar_coord.dir_i360()}"\tposRadius="{round(self.polar_coord.rad)}"\tposZ="{round(self.polar_coord.z)}"\tfireAngle=-{self.direction}"\t{self.get_arc_xml()}/>'
         #thrusters dont need y-mirroring
         return ret
     
     def render_to_image(self, image, rotation_dir):
-        self._render_point(image, rotation_dir)
-        self._render_arc(image, rotation_dir)
+        mirrors = self._get_mirror_options()
+        for mirror in mirrors:
+            self._render_point(image, rotation_dir, mirror)
+            self._render_arc(image, rotation_dir, mirror)
