@@ -44,6 +44,9 @@ class CCoord:
     
     def __str__(self) -> str:
         return f"({self.x},{self.y},{self.z})"
+    
+    def as_icoord(self):
+        return ICoord(self.x, self.y)
 
 @dataclass
 class ICoord:
@@ -55,18 +58,18 @@ class ICoord:
 
 @dataclass
 class PCoord:
-    dir: float = 0.0
-    rad: float = 0.0
+    a: float = 0.0
+    r: float = 0.0
     z: float = 0.0
     
     def __str__(self) -> str:
-        return f"({self.dir} radians,{self.rad},{self.z})"
+        return f"({self.a} radians,{self.r},{self.z})"
     
     def dir_deg(self) -> float:
-        return math.degrees(self.rad)
+        return math.degrees(self.r)
     
     def dir_i360(self) -> float:
-        return round(math.degrees(self.rad)) % 360
+        return round(math.degrees(self.r)) % 360
     
     def dir_i180(self) -> float:
         dir = self.dir_i360()

@@ -1,17 +1,11 @@
 
 from abc import ABC, abstractmethod
 import math
-from PIL import ImageTk
-import PIL
-from PIL.ImageFile import ImageFile
 from PIL.ImageDraw import ImageDraw
-from PIL.Image import Image
 from dataclasses import dataclass
 
 from transcendence_effect_placer.data.data import SpriteConfig, CCoord, ICoord, PCoord
 from transcendence_effect_placer.data.math import convert_polar_to_projection, convert_projection_to_polar
-from transcendence_effect_placer.ui.load_file import SpriteOpener
-from transcendence_effect_placer.ui.sprite_settings import SpriteSettingsDialogue
 
 @dataclass
 class MirrorOptions:
@@ -28,6 +22,15 @@ PT_THRUSTER = PointType("Thruster")
 PT_DOCK = PointType("Dock")
 PT_GENERIC = PointType("Generic")
 
+'''
+Coordinate systems:
+PIL: 0,0 is upper left, +x is right, +y is down <-- this is what PIL requires for drawing
+Sprite: 0,0 is center of sprite, +x is right, +y is up <-- this is what the user interacts with
+GeorgeScene: 0,0,0 is center of the sprite, +x is backwards (180 degrees from the bow), +y is PROBABLY to the port side, +z is above
+GeorgePolar: *,0 is the center of the sprite, a=0 is forwards, and a+ moves counter clockwise
+GeorgeZ: the z position is weird and exists sort of outside most of these except the scene?
+'''
+
 class Point(ABC):
     point_type: PointType = PT_GENERIC
     color = (0,255,0,255)
@@ -38,26 +41,34 @@ class Point(ABC):
         self.projection_coord = coord
         print(self.projection_coord)
         self._cfg = sprite_cfg
-        self.polar_coord = convert_projection_to_polar(self._cfg, coord, rot_frame)
+        self.polar_coord = convert_projection_to_polar(self._cfg, self._to_raw_coord(coord), rot_frame) #we store the z-pos on the polar coord
         print(self.polar_coord)
         if rot_frame:
-            self.projection_coord = convert_polar_to_projection(self._cfg, self.polar_coord)
+            self.projection_coord = self._from_raw_coord(convert_polar_to_projection(self._cfg, self.polar_coord))
             print('rotationally corrected pos:', self.projection_coord)
         self.mirror = MirrorOptions()
 
+    def _to_raw_coord(self, coord: ICoord) -> ICoord:
+        return ICoord(coord.x, -coord.y)
+    
+    def _from_raw_coord(self, coord: ICoord) -> ICoord:
+        return ICoord(coord.x, -coord.y)
+
     def update_from_polar(self, coord: PCoord):
         self.polar_coord = coord
-        self.projection_coord = convert_polar_to_projection(self._cfg, coord)
+        raw_coord = convert_polar_to_projection(self._cfg, coord)
+        self.projection_coord = self._from_raw_coord(raw_coord)
 
     def update_from_projection(self, coord: ICoord, rot_frame: int = 0):
-        self.polar_coord = convert_projection_to_polar(self._cfg, coord, rot_frame)
+        packed_coord = self._to_raw_coord(CCoord(coord.x, coord.y, self.polar_coord.z))
+        self.polar_coord = convert_projection_to_polar(self._cfg, packed_coord, rot_frame)
         if rot_frame:
-            self.projection_coord = convert_polar_to_projection(self._cfg, self.polar_coord)
+            self.projection_coord = self._from_raw_coord(convert_polar_to_projection(self._cfg, self.polar_coord))
         else:
             self.projection_coord = coord
 
     def pil_coord(self, coord: ICoord) -> ICoord:
-        return ICoord(coord.x + round(self._cfg.w/2), coord.y + round(self._cfg.h/2))
+        return ICoord(-1*coord.x + round(self._cfg.w/2), coord.y + round(self._cfg.h/2))
     
     def __str__(self) -> str:
         return str(self.point_type) + ' ' + self.label + ': ' + repr(self.projection_coord)
@@ -76,15 +87,15 @@ class Point(ABC):
         self.update_from_polar(self.polar_coord)
 
     def set_radius(self, radius: float = 0.0):
-        self.polar_coord.rad = radius
+        self.polar_coord.r = radius
         self.update_from_polar(self.polar_coord)
 
     def set_pos_angle(self, pos_angle: float = 0.0):
-        self.polar_coord.rad = pos_angle
+        self.polar_coord.r = pos_angle
         self.update_from_polar(self.polar_coord)
 
     def set_pos_angle_deg(self, pos_angle_degrees: float = 0.0):
-        self.polar_coord.rad = math.radians(pos_angle_degrees)
+        self.polar_coord.r = math.radians(pos_angle_degrees)
         self.update_from_polar(self.polar_coord)
 
     def set_x(self, x:int = 0):
@@ -96,6 +107,9 @@ class Point(ABC):
         self.update_from_projection(self.projection_coord)
 
     def _mirror_angle_degrees(self, degrees: float, mirror: MirrorOptions) -> float:
+        #convert to transcendence ship angle, which is -90 degrees offset
+        degrees -= 90
+        degrees %= 360
         if degrees > 180:
             degrees -= 360
         if mirror.x:
@@ -106,13 +120,16 @@ class Point(ABC):
             else:
                 degrees += 180
             degrees *= -1
+        #convert back to screenspace angle
+        degrees += 90
+        degrees %= 360
         return degrees
 
     def get_projection_coord_at_direction(self, direction: int = 0, mirror: MirrorOptions = MIRROR_NULL) -> ICoord:
-        adj_dir_deg = math.degrees(self.polar_coord.dir)
-        adj_dir_deg = self._mirror_angle_degrees(adj_dir_deg, mirror) + direction % 360
+        adj_dir_deg = math.degrees(self.polar_coord.a)
+        adj_dir_deg = self._mirror_angle_degrees(adj_dir_deg, mirror) - direction % 360
         adj_dir = math.radians(adj_dir_deg)
-        adj_rad = self.polar_coord.rad
+        adj_rad = self.polar_coord.r
         adj_z = self.polar_coord.z * (-1 if mirror.z else 1)
         adjusted_direction = PCoord(adj_dir, adj_rad, adj_z)
         return self.pil_coord(convert_polar_to_projection(self._cfg, adjusted_direction))
@@ -257,9 +274,9 @@ class PointThuster(Point):
             return f'\tbringToFront="{range_str}"'
 
     def to_xml(self):
-        ret = f'<Effect type="thrustMain"\t\tposAngle="{self.polar_coord.dir_i360()}"\tposRadius="{round(self.polar_coord.rad)}"\tposZ="{round(self.polar_coord.z)}"\trotation="{self.direction}"\teffect="&efMainThrusterLarge;"{self.get_send_to_back()}{self.get_bring_to_front()}/>'
+        ret = f'<Effect type="thrustMain"\t\tposAngle="{self.polar_coord.dir_i360()}"\tposRadius="{round(self.polar_coord.r)}"\tposZ="{round(self.polar_coord.z)}"\trotation="{self.direction}"\teffect="&efMainThrusterLarge;"{self.get_send_to_back()}{self.get_bring_to_front()}/>'
         if self.mirror.x:
-            ret += f'<Effect type="thrustMain"\t\tposAngle="-{self.polar_coord.dir_i360()}"\tposRadius="{round(self.polar_coord.rad)}"\tposZ="{round(self.polar_coord.z)}"\trotation=-{self.direction}"\teffect="&efMainThrusterLarge;"{self.get_send_to_back()}{self.get_bring_to_front()}/>'
+            ret += f'<Effect type="thrustMain"\t\tposAngle="-{self.polar_coord.dir_i360()}"\tposRadius="{round(self.polar_coord.r)}"\tposZ="{round(self.polar_coord.z)}"\trotation=-{self.direction}"\teffect="&efMainThrusterLarge;"{self.get_send_to_back()}{self.get_bring_to_front()}/>'
         #thrusters dont need y-mirroring
         return ret
     
@@ -345,9 +362,9 @@ class PointDevice(Point):
         return ""
 
     def to_xml(self):
-        ret = f'<DeviceSlot id="{self.label}"\t\tposAngle="{self.polar_coord.dir_i360()}"\tposRadius="{round(self.polar_coord.rad)}"\tposZ="{round(self.polar_coord.z)}"\tfireAngle="{self.direction}"\t{self.get_arc_xml()}/>'
+        ret = f'<DeviceSlot id="{self.label}"\t\tposAngle="{self.polar_coord.dir_i360()}"\tposRadius="{round(self.polar_coord.r)}"\tposZ="{round(self.polar_coord.z)}"\tfireAngle="{self.direction}"\t{self.get_arc_xml()}/>'
         if self.mirror.x:
-            ret += f'<DeviceSlot id="{self.label}"\t\tposAngle="-{self.polar_coord.dir_i360()}"\tposRadius="{round(self.polar_coord.rad)}"\tposZ="{round(self.polar_coord.z)}"\tfireAngle=-{self.direction}"\t{self.get_arc_xml()}/>'
+            ret += f'<DeviceSlot id="{self.label}"\t\tposAngle="-{self.polar_coord.dir_i360()}"\tposRadius="{round(self.polar_coord.r)}"\tposZ="{round(self.polar_coord.z)}"\tfireAngle=-{self.direction}"\t{self.get_arc_xml()}/>'
         #thrusters dont need y-mirroring
         return ret
     

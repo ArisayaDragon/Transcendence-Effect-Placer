@@ -441,8 +441,8 @@ class SpriteViewer:
         x = projected.x
         y = projected.y
         polar = point.polar_coord
-        a = polar.dir
-        r = polar.rad
+        a = polar.a
+        r = polar.r
         z = polar.z
 
         pt = point.point_type
@@ -665,7 +665,7 @@ class SpriteViewer:
         self.display_sprite()
 
     def add_point(self, event: Event[Label]):
-        x = event.x - self._sprite_cfg.w // 2 #use floor division since the game probably does too
+        x = (event.x - self._sprite_cfg.w // 2) #use floor division since the game probably does too
         y = -1 * (event.y - self._sprite_cfg.h // 2) #positive y is to the top of the image
         
         coord = ICoord(x, y)
