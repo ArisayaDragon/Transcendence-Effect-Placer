@@ -108,10 +108,9 @@ class Point(ABC):
             degrees *= -1
         return degrees
 
-
     def get_projection_coord_at_direction(self, direction: int = 0, mirror: MirrorOptions = MIRROR_NULL) -> ICoord:
-        adj_dir_deg = math.degrees(self.polar_coord.dir) + direction % 360
-        adj_dir_deg = self._mirror_angle_degrees(adj_dir_deg, mirror)
+        adj_dir_deg = math.degrees(self.polar_coord.dir)
+        adj_dir_deg = self._mirror_angle_degrees(adj_dir_deg, mirror) + direction % 360
         adj_dir = math.radians(adj_dir_deg)
         adj_rad = self.polar_coord.rad
         adj_z = self.polar_coord.z * (-1 if mirror.z else 1)
