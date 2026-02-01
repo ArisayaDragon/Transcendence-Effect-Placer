@@ -144,6 +144,17 @@ class SpriteViewer:
                 elif isinstance(entry, Entry) and not valid:
                     entry.configure(fg=RED)
             return sv_callback
+        
+        def make_sv_callback_arc(sv: StringVar, entry: Entry, validation_fn: Callable[[str], bool] = validate_null):
+            def sv_callback(var_name, index, mode):
+                s = sv.get()
+                valid = validation_fn(s)
+                if valid:
+                    entry.configure(fg=BLACK)
+                    self.update_point_arcs() #does a general validation check on all inputs, in event a bad input was left
+                elif isinstance(entry, Entry) and not valid:
+                    entry.configure(fg=RED)
+            return sv_callback
 
         self.points_listbox = Listbox(self.control_frame)
         self.points_listbox.pack(fill=BOTH, expand=True)
@@ -236,13 +247,13 @@ class SpriteViewer:
 
         self.sv_pos_dir = StringVar()
         self.pos_dir_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_dir, state=DISABLED)
-        self.sv_pos_dir.trace_add(SV_WRITE, make_sv_callback(self.sv_pos_dir, self.pos_dir_entry, validate_numeral))
+        self.sv_pos_dir.trace_add(SV_WRITE, make_sv_callback_arc(self.sv_pos_dir, self.pos_dir_entry, validate_numeral))
 
         pos_arc_label = Label(self.update_point_frame, text="Arc")
 
         self.sv_pos_arc = StringVar()
         self.pos_arc_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_arc, state=DISABLED)
-        self.sv_pos_arc.trace_add(SV_WRITE, make_sv_callback(self.sv_pos_arc, self.pos_arc_entry, validate_numeral))
+        self.sv_pos_arc.trace_add(SV_WRITE, make_sv_callback_arc(self.sv_pos_arc, self.pos_arc_entry, validate_numeral))
 
         pos_dir_label.grid(row=r, column=0)
         self.pos_dir_entry.grid(row=r, column=1)
@@ -255,13 +266,13 @@ class SpriteViewer:
 
         self.sv_pos_arc_st = StringVar()
         self.pos_arc_st_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_arc_st, state=DISABLED)
-        self.sv_pos_arc_st.trace_add(SV_WRITE, make_sv_callback(self.sv_pos_arc_st, self.pos_arc_st_entry, validate_numeral))
+        self.sv_pos_arc_st.trace_add(SV_WRITE, make_sv_callback_arc(self.sv_pos_arc_st, self.pos_arc_st_entry, validate_numeral))
 
         pos_arc_en_label = Label(self.update_point_frame, text="Arc End")
 
         self.sv_pos_arc_en = StringVar()
         self.pos_arc_en_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_arc_en, state=DISABLED)
-        self.sv_pos_arc_en.trace_add(SV_WRITE, make_sv_callback(self.sv_pos_arc_en, self.pos_arc_en_entry, validate_numeral))
+        self.sv_pos_arc_en.trace_add(SV_WRITE, make_sv_callback_arc(self.sv_pos_arc_en, self.pos_arc_en_entry, validate_numeral))
 
         pos_arc_st_label.grid(row=r, column=0)
         self.pos_arc_st_entry.grid(row=r, column=1)
@@ -549,6 +560,48 @@ class SpriteViewer:
         point.update_from_projection(ICoord(x, y), z)
         self.points_listbox.delete(i)
         self.points_listbox.insert(i, str(point))
+
+        self.display_sprite()
+
+    def update_point_arcs(self, event: Event|None = None):
+        #the index is actually a tuple of all selected items in the list
+        #but our list only selects 1 so it doesnt matter
+        selected_index = self.points_listbox.curselection()
+        if not selected_index:
+            i = self._selected_idx
+        else:
+            #we can only edit one at a time, so we only take the first
+            i = selected_index[0]
+        if i < 0:
+            print("no valid index selected")
+            return
+        
+        point: Point = self._points[i]
+
+        if isinstance(point, PointThuster) or isinstance(point, PointDevice):
+            #handle direction
+            point.direction = int(self.sv_pos_dir.get())
+        if isinstance(point, PointDevice):
+            #handle arcs
+            use_range = False
+            use_arc = False
+            old_arc = point.arc
+            old_start = point.arc_start
+            old_end = point.arc_end
+            new_arc = int(self.sv_pos_arc.get())
+            new_start = int(self.sv_pos_arc_st.get())
+            new_end = int(self.sv_pos_arc_en.get())
+
+            if old_arc != new_arc:
+                use_arc = True
+            if old_start != new_start or old_end != new_end:
+                use_range = True
+
+            if use_range:
+                point.arc_end = new_end
+                point.arc_start = new_start
+            elif use_arc:
+                point.arc = new_arc
 
         self.display_sprite()
 
