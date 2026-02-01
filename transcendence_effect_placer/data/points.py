@@ -40,10 +40,10 @@ class Point(ABC):
         self.polar_coord = coord
         self.projection_coord = convert_polar_to_projection(self._cfg, coord)
 
-    def update_from_projection(self, coord: ICoord, rot_frame: int):
+    def update_from_projection(self, coord: ICoord, rot_frame: int = 0):
         self.polar_coord = convert_projection_to_polar(self._cfg, coord, rot_frame)
         if rot_frame:
-            self.projection_coord = convert_polar_to_projection(self._cfg, self.polar_coord, rot_frame)
+            self.projection_coord = convert_polar_to_projection(self._cfg, self.polar_coord)
         else:
             self.projection_coord = coord
 
@@ -91,9 +91,6 @@ class Point(ABC):
     def to_xml(self) -> str:
         pass
 
-    def draw(self, image: Image, rotation_dir: int):
-        draw = ImageDraw.Draw(image, rotation_dir)
-
     @abstractmethod
     def render_to_image(self, image: ImageDraw, rotation_dir: int):
         pass
@@ -114,13 +111,13 @@ class PointDock(Point):
     color = (0,0,255,255)
     
     def to_xml(self):
-        ret = f'<Port x="{self.projection_coord.x}"\ty="{self.projection_coord.y}"\>'
+        ret = f'<Port x="{self.projection_coord.x}"\ty="{self.projection_coord.y}"/>'
         if self.mirror_x:
-            ret += f'\n<Port x="{self.projection_coord.x * -1}"\ty="{self.projection_coord.y}"\>'
+            ret += f'\n<Port x="{self.projection_coord.x * -1}"\ty="{self.projection_coord.y}"/>'
         if self.mirror_y:
-            ret += f'\n<Port x="{self.projection_coord.x}"\ty="{self.projection_coord.y * -1}"\>'
+            ret += f'\n<Port x="{self.projection_coord.x}"\ty="{self.projection_coord.y * -1}"/>'
         if self.mirror_x and self.mirror_y:
-            ret += f'\n<Port x="{self.projection_coord.x * -1}"\ty="{self.projection_coord.y * -1}"\>'
+            ret += f'\n<Port x="{self.projection_coord.x * -1}"\ty="{self.projection_coord.y * -1}"/>'
         return ret
     
     def render_to_image(self, image, rotation_dir):
@@ -172,15 +169,15 @@ class PointThuster(Point):
             if range_start < 0:
                 if e == match:
                     range_start = i
-                    range_str.append(f",{i}")
+                    range_str += f",{i}"
             if range_start >= 0:
                 if e != match:
                     if range_start == i-1:
                         pass
                     elif range_start == i-2:
-                        range_str.append(f",{i-1}")
+                        range_str += f",{i-1}"
                     else:
-                        range_str.append(f"-{i-1}")
+                        range_str += f"-{i-1}"
                     range_start = -1
         range_str = range_str.strip(',')
         return range_str
@@ -204,9 +201,9 @@ class PointThuster(Point):
             return f'\tbringToFront="{range_str}"'
 
     def to_xml(self):
-        ret = f'<Effect type="thrustMain"\t\tposAngle="{round(self.polar_coord.dir_degrees()) % 360}"\tposRadius="{round(self.polar_coord.rad)}"\tposZ="{round(self.polar_coord.z)}"\trotation="{self.direction}"\teffect="&efMainThrusterLarge;"{self.get_send_to_back()}{self.get_bring_to_front()}\>'
+        ret = f'<Effect type="thrustMain"\t\tposAngle="{self.polar_coord.dir_i360()}"\tposRadius="{round(self.polar_coord.rad)}"\tposZ="{round(self.polar_coord.z)}"\trotation="{self.direction}"\teffect="&efMainThrusterLarge;"{self.get_send_to_back()}{self.get_bring_to_front()}/>'
         if self.mirror_x:
-            ret += f'<Effect type="thrustMain"\t\tposAngle="-{round(self.polar_coord.dir_degrees()) % 360}"\tposRadius="{round(self.polar_coord.rad)}"\tposZ="{round(self.polar_coord.z)}"\trotation=-{self.direction}"\teffect="&efMainThrusterLarge;"{self.get_send_to_back()}{self.get_bring_to_front()}\>'
+            ret += f'<Effect type="thrustMain"\t\tposAngle="-{self.polar_coord.dir_i360()}"\tposRadius="{round(self.polar_coord.rad)}"\tposZ="{round(self.polar_coord.z)}"\trotation=-{self.direction}"\teffect="&efMainThrusterLarge;"{self.get_send_to_back()}{self.get_bring_to_front()}/>'
         #thrusters dont need y-mirroring
         return ret
     
@@ -281,10 +278,13 @@ class PointDevice(Point):
         image.arc((pos.x-5, pos.y-5, pos.x+5, pos.y+5), (90+start) % 360, (90+end) % 360, fill=self.color_arc)
         image.arc((pos.x-7, pos.y-7, pos.x+7, pos.y+7), (90+aim_dir) % 360, (90+aim_dir) % 360, fill=self.color)
 
+    def get_arc_xml(self):
+        return ""
+
     def to_xml(self):
-        ret = f'<Effect type="thrustMain"\t\tposAngle="{round(self.polar_coord.dir_degrees()) % 360}"\tposRadius="{round(self.polar_coord.rad)}"\tposZ="{round(self.polar_coord.z)}"\trotation="{self.direction}"\teffect="&efMainThrusterLarge;"{self.get_send_to_back()}{self.get_bring_to_front()}\>'
+        ret = f'<DeviceSlot id="{self.label}"\t\tposAngle="{self.polar_coord.dir_i360()}"\tposRadius="{round(self.polar_coord.rad)}"\tposZ="{round(self.polar_coord.z)}"\tfireAngle="{self.direction}"\t{self.get_arc_xml()}/>'
         if self.mirror_x:
-            ret += f'<Effect type="thrustMain"\t\tposAngle="-{round(self.polar_coord.dir_degrees()) % 360}"\tposRadius="{round(self.polar_coord.rad)}"\tposZ="{round(self.polar_coord.z)}"\trotation=-{self.direction}"\teffect="&efMainThrusterLarge;"{self.get_send_to_back()}{self.get_bring_to_front()}\>'
+            ret += f'<DeviceSlot id="{self.label}"\t\tposAngle="-{self.polar_coord.dir_i360()}"\tposRadius="{round(self.polar_coord.rad)}"\tposZ="{round(self.polar_coord.z)}"\tfireAngle=-{self.direction}"\t{self.get_arc_xml()}/>'
         #thrusters dont need y-mirroring
         return ret
     

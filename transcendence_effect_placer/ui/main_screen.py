@@ -1,7 +1,6 @@
 from __future__ import annotations
 import tkinter as tk
-from tkinter import LEFT, RIGHT, TOP, BOTTOM, X, Y, VERTICAL, HORIZONTAL, BOTH, END, Toplevel, Tk, Scale, Label, Event, StringVar, Entry, Frame, Listbox, Button
-from tkinter import filedialog, messagebox
+from tkinter import LEFT, RIGHT, TOP, BOTTOM, X, Y, VERTICAL, HORIZONTAL, BOTH, END, NORMAL, ACTIVE, DISABLED, Toplevel, Tk, Scale, Label, Event, StringVar, Entry, Frame, Listbox, Checkbutton, Radiobutton, Button, IntVar
 from PIL import ImageTk
 import PIL
 from PIL.ImageFile import ImageFile
@@ -9,11 +8,10 @@ from PIL.ImageDraw import ImageDraw
 from PIL.Image import Image
 import numpy as np
 from time import sleep
-import math
+from typing import Callable
 
 from transcendence_effect_placer.common.validation import validate_numeral, validate_numeral_non_negative, validate_null
 from transcendence_effect_placer.data.data import SpriteConfig, CCoord, ICoord, PCoord
-from transcendence_effect_placer.data.math import convert_polar_to_projection, convert_projection_to_polar
 from transcendence_effect_placer.data.points import Point, PointGeneric, PointDevice, PointDock, PointThuster, PointType, PT_DEVICE, PT_DOCK, PT_GENERIC, PT_THRUSTER
 from transcendence_effect_placer.ui.load_file import SpriteOpener
 from transcendence_effect_placer.ui.sprite_settings import SpriteSettingsDialogue
@@ -70,6 +68,7 @@ class SpriteViewer:
         self.load_image()
 
     def _init_wnd(self):
+        self._root.title("Transcendence Effect Placer")
         self._main_menu.display()
 
         self.control_frame = Frame(self._root, width=int(self._root.winfo_screenwidth() * 0.2))
@@ -87,6 +86,8 @@ class SpriteViewer:
         slider_frame = Frame(self.display_frame)
         slider_frame.pack(fill=X)
 
+        pos_x_label = Label(slider_frame, text="Anim Frame")
+        pos_x_label.pack(side=LEFT)
         self._anim_slider = Scale(slider_frame, from_=0, to=self._sprite_cfg.anim_frames, orient=tk.HORIZONTAL, length=200, command=self.display_sprite)
         self._anim_slider.set(0)
         self._anim_slider.pack(side=LEFT)
@@ -94,11 +95,46 @@ class SpriteViewer:
         self._rot_slider = Scale(slider_frame, from_=0, to=self._sprite_cfg.rot_frames - 1, orient=tk.HORIZONTAL, length=200, command=self.display_sprite)
         self._rot_slider.set(0)
         self._rot_slider.pack(side=RIGHT)
+        pos_x_label = Label(slider_frame, text="Rotation Frame")
+        pos_x_label.pack(side=RIGHT)
 
-        self._image_display.bind("<Button-1>", self.add_coordinate)
+        self._image_display.bind("<Button-1>", self.add_point)
+
+    def _change_point_type(self):
+        selected_index = self.points_listbox.curselection()
+        if not selected_index:
+            i = self._selected_idx
+        else:
+            #we can only edit one at a time, so we only take the first
+            i = selected_index[0]
+        if i < 0:
+            print("no valid index selected")
+            return
+
+        pt: PointType = PointType(self.sv_point_type.get())
+
+        old_point = self._points[i]
+        if old_point.point_type == pt:
+            return
+
+        if pt == PT_DEVICE:
+            new_point = PointDevice(old_point.projection_coord, old_point.label, self._sprite_cfg, 0)
+        elif pt == PT_THRUSTER:
+            new_point = PointThuster(old_point.projection_coord, old_point.label, self._sprite_cfg, 0)
+        elif pt == PT_DOCK:
+            new_point = PointDock(old_point.projection_coord, old_point.label, self._sprite_cfg, 0)
+        else:
+            print(f"unexpectedly got point type {pt} of type {type(pt)}")
+            assert False
+        
+        self._points[i] = new_point
+        self.points_listbox.delete(i)
+        self.points_listbox.insert(i, str(new_point))
+        self.set_current_point_controls()
+        self.display_sprite()
 
     def _init_control_frame(self):
-        def make_sv_callback(sv: StringVar, entry: Entry, validation_fn: function[str] = validate_null):
+        def make_sv_callback(sv: StringVar, entry: Entry, validation_fn: Callable[[str], bool] = validate_null):
             def sv_callback(var_name, index, mode):
                 s = sv.get()
                 valid = validation_fn(s)
@@ -116,24 +152,123 @@ class SpriteViewer:
         self.update_point_frame = Frame(self.control_frame)
         self.update_point_frame.pack()
 
+        r = 0
+
+        point_type_label = Label(self.update_point_frame, text="Type")
+
+        self.sv_point_type = StringVar()
+        self.sv_point_type.set(PT_GENERIC)
+        self.point_type_device = Radiobutton(self.update_point_frame, text="Device", value=PT_DEVICE, variable=self.sv_point_type, command=self._change_point_type, state=DISABLED)
+        self.point_type_thruster = Radiobutton(self.update_point_frame, text="Thruster", value=PT_THRUSTER, variable=self.sv_point_type, command=self._change_point_type, state=DISABLED)
+        self.point_type_dock = Radiobutton(self.update_point_frame, text="Dock", value=PT_DOCK, variable=self.sv_point_type, command=self._change_point_type, state=DISABLED)
+
+        point_type_label.grid(row=r, column=0)
+        self.point_type_device.grid(row=r, column=1)
+        self.point_type_thruster.grid(row=r, column=2)
+        self.point_type_dock.grid(row=r, column=3)
+
+        r += 1
+
         pos_x_label = Label(self.update_point_frame, text="Pos X")
-        pos_x_label.pack(side=LEFT)
 
         self.sv_pos_x = StringVar()
-        self.pos_x_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_x)
-        self.pos_x_entry.pack(side=LEFT)
+        self.pos_x_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_x, state=DISABLED)
         self.sv_pos_x.trace_add(SV_WRITE, make_sv_callback(self.sv_pos_x, self.pos_x_entry, validate_numeral))
 
         pos_y_label = Label(self.update_point_frame, text="Pos Y")
-        pos_y_label.pack(side=RIGHT)
 
         self.sv_pos_y = StringVar()
-        self.pos_y_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_y)
-        self.pos_y_entry.pack(side=RIGHT)
+        self.pos_y_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_y, state=DISABLED)
         self.sv_pos_y.trace_add(SV_WRITE, make_sv_callback(self.sv_pos_y, self.pos_y_entry, validate_numeral))
 
-        delete_button = Button(self.update_point_frame, text="Delete Point", command=self.delete_point)
-        delete_button.pack(side=BOTTOM)
+        pos_x_label.grid(row=r, column=0)
+        self.pos_x_entry.grid(row=r, column=1)
+        pos_y_label.grid(row=r, column=2)
+        self.pos_y_entry.grid(row=r, column=3)
+
+        r += 1
+
+        pos_z_label = Label(self.update_point_frame, text="Pos Z")
+
+        self.sv_pos_z = StringVar()
+        self.pos_z_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_z, state=DISABLED)
+        self.sv_pos_z.trace_add(SV_WRITE, make_sv_callback(self.sv_pos_z, self.pos_z_entry, validate_numeral))
+
+        pos_z_label.grid(row=r, column=0)
+        self.pos_z_entry.grid(row=r, column=1)
+
+        r += 1
+
+        pos_a_label = Label(self.update_point_frame, text="Angle")
+
+        self.sv_pos_a = StringVar()
+        self.pos_a_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_a, state=DISABLED)
+        self.sv_pos_a.trace_add(SV_WRITE, make_sv_callback(self.sv_pos_a, self.pos_a_entry, validate_numeral))
+
+        pos_r_label = Label(self.update_point_frame, text="Radius")
+
+        self.sv_pos_r = StringVar()
+        self.pos_r_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_r, state=DISABLED)
+        self.sv_pos_r.trace_add(SV_WRITE, make_sv_callback(self.sv_pos_r, self.pos_r_entry, validate_numeral))
+
+        pos_a_label.grid(row=r, column=0)
+        self.pos_a_entry.grid(row=r, column=1)
+        pos_r_label.grid(row=r, column=2)
+        self.pos_r_entry.grid(row=r, column=3)
+
+        r += 1
+
+        self.iv_mirror_x = IntVar()
+        self.iv_mirror_y = IntVar()
+
+        self.mirror_x_check = Checkbutton(self.update_point_frame, text="Mirror X", variable=self.iv_mirror_x, command=self.update_point, state=DISABLED)
+        self.mirror_y_check = Checkbutton(self.update_point_frame, text="Mirror Y", variable=self.iv_mirror_y, command=self.update_point, state=DISABLED)
+
+        self.mirror_x_check.grid(row=r, column=0)
+        self.mirror_y_check.grid(row=r, column=2)
+
+        r += 1
+
+        pos_dir_label = Label(self.update_point_frame, text="Direction")
+
+        self.sv_pos_dir = StringVar()
+        self.pos_dir_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_dir, state=DISABLED)
+        self.sv_pos_dir.trace_add(SV_WRITE, make_sv_callback(self.sv_pos_dir, self.pos_dir_entry, validate_numeral))
+
+        pos_arc_label = Label(self.update_point_frame, text="Arc")
+
+        self.sv_pos_arc = StringVar()
+        self.pos_arc_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_arc, state=DISABLED)
+        self.sv_pos_arc.trace_add(SV_WRITE, make_sv_callback(self.sv_pos_arc, self.pos_arc_entry, validate_numeral))
+
+        pos_dir_label.grid(row=r, column=0)
+        self.pos_dir_entry.grid(row=r, column=1)
+        pos_arc_label.grid(row=r, column=2)
+        self.pos_arc_entry.grid(row=r, column=3)
+
+        r += 1
+
+        pos_arc_st_label = Label(self.update_point_frame, text="Arc Start")
+
+        self.sv_pos_arc_st = StringVar()
+        self.pos_arc_st_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_arc_st, state=DISABLED)
+        self.sv_pos_arc_st.trace_add(SV_WRITE, make_sv_callback(self.sv_pos_arc_st, self.pos_arc_st_entry, validate_numeral))
+
+        pos_arc_en_label = Label(self.update_point_frame, text="Arc")
+
+        self.sv_pos_arc_en = StringVar()
+        self.pos_arc_en_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_arc_en, state=DISABLED)
+        self.sv_pos_arc_en.trace_add(SV_WRITE, make_sv_callback(self.sv_pos_arc_en, self.pos_arc_en_entry, validate_numeral))
+
+        pos_arc_st_label.grid(row=r, column=0)
+        self.pos_arc_st_entry.grid(row=r, column=1)
+        pos_arc_en_label.grid(row=r, column=2)
+        self.pos_arc_en_entry.grid(row=r, column=3)
+
+        r += 1
+
+        self.delete_button = Button(self.update_point_frame, text="Delete Point", command=self.delete_point, state=DISABLED)
+        self.delete_button.grid(row=r, column=1, columnspan=2)
 
     def load_sprite_cfg(self):
         self._wnd_sprite_settings.open_dialogue(self._sprite_cfg)
@@ -165,10 +300,15 @@ class SpriteViewer:
                 self._root.quit()
                 quit()
 
-        self._image = PIL.Image.open(self._image_path)
+        self._image: ImageFile = PIL.Image.open(self._image_path)
         self._sprite_cfg.w = int(self._image.size[0] / 20)
         self._sprite_cfg.h = int(self._image.size[1] / 18)
         self._sprite_cfg.real = False
+
+        path = self._image_path.replace("\\","/")
+        file = path.split("/")[-1]
+        self._root.title(f"Transcendence Effect Placer: {file}")
+
         self.load_sprite_cfg()
 
     def display_sprite(self, event: Event|None = None):
@@ -223,59 +363,138 @@ class SpriteViewer:
         print(export_str)
 
     def reset_point_controls(self):
+        self.sv_point_type.set(PT_GENERIC)
+        self.point_type_device.configure(state = DISABLED)
+        self.point_type_thruster.configure(state = DISABLED)
+        self.point_type_dock.configure(state = DISABLED)
         self.pos_x_entry.configure(fg=BLACK)
         self.pos_x_entry.delete(0, END)
+        self.pos_x_entry.configure(state=DISABLED)
         self.pos_y_entry.configure(fg=BLACK)
         self.pos_y_entry.delete(0, END)
+        self.pos_y_entry.configure(state=DISABLED)
+        self.pos_z_entry.configure(fg=BLACK)
+        self.pos_z_entry.delete(0, END)
+        self.pos_z_entry.configure(state=DISABLED)
+        self.pos_a_entry.configure(fg=BLACK)
+        self.pos_a_entry.delete(0, END)
+        self.pos_a_entry.configure(state=DISABLED)
+        self.pos_r_entry.configure(fg=BLACK)
+        self.pos_r_entry.delete(0, END)
+        self.pos_r_entry.configure(state=DISABLED)
+        self.pos_dir_entry.configure(fg=BLACK)
+        self.pos_dir_entry.delete(0, END)
+        self.pos_dir_entry.configure(state=DISABLED)
+        self.pos_arc_entry.configure(fg=BLACK)
+        self.pos_arc_entry.delete(0, END)
+        self.pos_arc_entry.configure(state=DISABLED)
+        self.pos_arc_st_entry.configure(fg=BLACK)
+        self.pos_arc_st_entry.delete(0, END)
+        self.pos_arc_st_entry.configure(state=DISABLED)
+        self.pos_arc_en_entry.configure(fg=BLACK)
+        self.pos_arc_en_entry.delete(0, END)
+        self.pos_arc_en_entry.configure(state=DISABLED)
+        self.mirror_x_check.configure(state=DISABLED)
+        self.mirror_y_check.configure(state=DISABLED)
+        self.delete_button.configure(state=DISABLED)
 
     def get_cur_rot_frame(self) -> int:
-        if self._mode == _MODE_STATION:
+        if self._mode == _MODE_STATION or self._rot_slider is None:
             return 0
         else:
-            return self._rot_slider.get()
+            return int(self._rot_slider.get())
 
     def set_current_point_controls(self):
-        #the index is actually a tuple of all selected items in the list
         selected_index = self.points_listbox.curselection()
         if not selected_index:
+            i = self._selected_idx
+        else:
+            #we can only edit one at a time, so we only take the first
+            i = selected_index[0]
+        if i < 0:
+            print("no valid index selected")
             return
-        
-        #we can only edit one at a time, so we only take the first
-        i = selected_index[0]
 
         point: Point = self._points[i]
-        projected = point.get_projection_coord_at_direction(self.get_cur_rot_frame())
+        projected = point.projection_coord #point.get_projection_coord_at_direction(self.get_cur_rot_frame())
         x = projected.x
         y = projected.y
+        polar = point.polar_coord
+        a = polar.dir
+        r = polar.rad
+        z = polar.z
+
+        pt = point.point_type
+
+        print(i, type(point), pt, x, y, a, r, z)
 
         self.reset_point_controls()
 
-        self.pos_x_entry.delete(0, END)
-        self.pos_x_entry.insert(0, str(x))
-        self.pos_y_entry.delete(0, END)
-        self.pos_y_entry.insert(0, str(y))
+        self.sv_point_type.set(pt)
+        self.point_type_device.configure(state = NORMAL)
+        self.point_type_thruster.configure(state = NORMAL)
+        self.point_type_dock.configure(state = NORMAL)
+
+        self.sv_pos_x.set(str(x))
+        self.pos_x_entry.configure(state = NORMAL)
+        self.sv_pos_y.set(str(y))
+        self.pos_y_entry.configure(state = NORMAL)
+        self.sv_pos_z.set(str(z))
+        self.pos_z_entry.configure(state = NORMAL)
+        self.sv_pos_a.set(str(a))
+        self.sv_pos_r.set(str(r))
+
+        if isinstance(point, PointDevice) or isinstance(point, PointThuster):
+            direction = point.direction
+            self.sv_pos_dir.set(str(direction))
+            self.pos_dir_entry.configure(state = NORMAL)
+        else:
+            self.sv_pos_dir.set("")
+            self.pos_dir_entry.configure(state = DISABLED)
+
+        if isinstance(point, PointDevice):
+            arc = point.arc
+            arc_st = point.arc_start
+            arc_en = point.arc_end
+            self.sv_pos_arc.set(str(arc))
+            self.pos_arc_entry.configure(state = NORMAL)
+            self.sv_pos_arc_st.set(str(arc_st))
+            self.pos_arc_st_entry.configure(state = NORMAL)
+            self.sv_pos_arc_en.set(str(arc_en))
+            self.pos_arc_en_entry.configure(state = NORMAL)
+        else:
+            self.sv_pos_arc.set("")
+            self.sv_pos_arc_en.set("")
+            self.sv_pos_arc_st.set("")
+            self.pos_arc_entry.configure(state = DISABLED)
+            self.pos_arc_st_entry.configure(state = DISABLED)
+            self.pos_arc_en_entry.configure(state = DISABLED)
+
+        print(point.mirror_x, point.mirror_y)
+        self.iv_mirror_x = 1 if point.mirror_x else 0
+        self.iv_mirror_y = 1 if point.mirror_y else 0
+        if point.mirror_x:
+            self.mirror_x_check.select()
+        else:
+            self.mirror_x_check.deselect()
+        if point.mirror_y:
+            self.mirror_y_check.select()
+        else:
+            self.mirror_y_check.deselect()
+        self.mirror_x_check.configure(state=NORMAL)
+        self.mirror_y_check.configure(state=NORMAL)
+
+        self.delete_button.configure(state=NORMAL)
 
     def select_point(self, event: Event):
         #the index is actually a tuple of all selected items in the list
         selected_index = self.points_listbox.curselection()
         if not selected_index:
             return
-        
-        #we can only edit one at a time, so we only take the first
-        i = selected_index[0]
-        self._selected_idx = i
-
-        point: Point = self._points[i]
-
-        x = point.projection_coord.x
-        y = point.projection_coord.y
+        self._selected_idx = selected_index[0]
 
         self.reset_point_controls()
-
-        self.pos_x_entry.delete(0, END)
-        self.pos_x_entry.insert(0, str(x))
-        self.pos_y_entry.delete(0, END)
-        self.pos_y_entry.insert(0, str(y))
+        self.set_current_point_controls()
 
     def update_point(self, event: Event|None = None):
         #the index is actually a tuple of all selected items in the list
@@ -292,30 +511,31 @@ class SpriteViewer:
 
         xs = self.pos_x_entry.get()
         ys = self.pos_y_entry.get()
+        zs = self.pos_z_entry.get()
 
         #fail if any are not parsable
         failed = False
 
         if not xs.strip('-').isnumeric():
-            self.pos_x_entry.configure(fg=RED)
             failed = True
-        else:
-            self.pos_x_entry.configure(fg=BLACK)
 
         if not ys.strip('-').isnumeric():
-            self.pos_y_entry.configure(fg=RED)
             failed = True
-        else:
-            self.pos_y_entry.configure(fg=BLACK)
+
+        if not zs.strip('-').isnumeric():
+            failed = True
 
         if failed:
             return
         
         x = int(xs)
         y = int(ys)
+        z = int(zs)
 
         point: Point = self._points[i]
-        point.update_from_projection(ICoord(x, y), 0)
+        point.set_mirror_x(bool(self.iv_mirror_x))
+        point.set_mirror_y(bool(self.iv_mirror_y))
+        point.update_from_projection(ICoord(x, y), z)
         self.points_listbox.delete(i)
         self.points_listbox.insert(i, str(point))
 
@@ -352,17 +572,20 @@ class SpriteViewer:
             #we just have the next one selected
             self.points_listbox.select_set(i)
 
-        
+        if self._selected_idx >= 0:
+            self.set_current_point_controls()
         self.display_sprite()
 
-    def add_coordinate(self, event: Event[Label]):
+    def add_point(self, event: Event[Label]):
         x = event.x - self._sprite_cfg.w // 2
         y = event.y - self._sprite_cfg.h // 2
         
         coord = ICoord(x, y)
-        point = PointGeneric(coord, str(len(self._points)), self._sprite_cfg, self._rot_slider.get())
+        point = PointGeneric(coord, str(len(self._points)), self._sprite_cfg, self.get_cur_rot_frame())
         self._points.append(point)
         self.points_listbox.insert(END, str(point))
+        self._selected_idx = len(self._points) - 1
+        self.set_current_point_controls()
         self.display_sprite()
 
     def refresh_main_window(self):
@@ -371,10 +594,12 @@ class SpriteViewer:
         self.points_listbox.delete(0, END)
 
         #reset sliders
-        self._anim_slider.set(0)
-        self._anim_slider.configure(from_=0, to=self._sprite_cfg.anim_frames)
-        self._rot_slider.set(0)
-        self._rot_slider.configure(from_=0, to=self._sprite_cfg.rot_frames - 1)
+        if self._anim_slider:
+            self._anim_slider.set(0)
+            self._anim_slider.configure(from_=0, to=self._sprite_cfg.anim_frames)
+        if self._rot_slider:
+            self._rot_slider.set(0)
+            self._rot_slider.configure(from_=0, to=self._sprite_cfg.rot_frames - 1)
 
         #reset point editing
         self.reset_point_controls()
@@ -388,4 +613,5 @@ class SpriteViewer:
             self._root.quit()
             return
         
-        self._image_display.config(image=self._sprite_image)
+        if self._image_display:
+            self._image_display.config(image=self._sprite_image)
