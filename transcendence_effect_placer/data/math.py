@@ -49,12 +49,11 @@ def convert_projection_to_polar(sprite_cfg: SpriteConfig, coord: CCoord|ICoord, 
 
     den = py * _K1 - d * _K2
     if den < _MIN_DEN:
-        print('min den')
         den = _MIN_DEN
 
     y = (-(z * _K1 * d) - (py * z * _K2) - (2.0 * py))/den
     yg = y * _K2 - z * _K1
-    x = px * yg / py if py else px / scale
+    x = px * yg / py if py else -px / scale
 
     ox = x * scale
     oy = y * scale
@@ -65,7 +64,6 @@ def convert_projection_to_polar(sprite_cfg: SpriteConfig, coord: CCoord|ICoord, 
     r = (px*px + py*py) ** 0.5
 
     ad = round(math.degrees(a))
-    print(ad, r, z)
     return PCoord(a, r, coord.z)
 
 '''

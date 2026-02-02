@@ -259,12 +259,9 @@ class SpriteViewer:
         if self._wnd_sprite_settings._sprite_cfg.real:
             self._sprite_cfg = self._wnd_sprite_settings._sprite_cfg
             self.refresh_main_window()
-            print('creating main window')
         elif self._sprite_cfg.real:
-            print('cancelled')
             return
         else:
-            print('exiting')
             self._root.quit()
             quit()
 
@@ -276,10 +273,8 @@ class SpriteViewer:
 
         if not self._image_path:
             if self._wnd_sprite_settings._sprite_cfg.real:
-                print('cancelled opening')
                 return
             else:
-                print('exiting')
                 self._root.quit()
                 quit()
 
@@ -295,19 +290,16 @@ class SpriteViewer:
         self.load_sprite_cfg()
 
     def display_sprite(self, event: Event|None = None):
-        print('cropping sprite to display')
         if self._image is None:
             return
-        print(f'image is {self._image}')
         
         anim_frame = 0 if self._anim_slider is None else int(self._anim_slider.get())
         rot_frame = 0 if self._rot_slider is None else int(self._rot_slider.get())
-        print(f'anim: {anim_frame}\trot: {rot_frame}')
+        #print(f'anim: {anim_frame}\trot: {rot_frame}')
 
         ul = self._sprite_cfg.frame(rot_frame, anim_frame)
         lr = ICoord(ul.x + self._sprite_cfg.w, ul.y + self._sprite_cfg.h)
         crop_rect = (ul.x, ul.y, lr.x, lr.y)
-        print(f'cropping to {crop_rect}')
         cropped_image = self._image.crop(crop_rect)
         
         direction = round(rot_frame * (360 / self._sprite_cfg.rot_frames))
@@ -318,7 +310,6 @@ class SpriteViewer:
 
         self._sprite_image = ImageTk.PhotoImage(cropped_image)
         if self._image_display is None:
-            print('Err: Label storing image was not initialized')
             return
         self._image_display.config(image=self._sprite_image)
 
@@ -338,11 +329,11 @@ class SpriteViewer:
         export_str_docking = export_str_docking.replace('\n','\n\t')
         export_str = ""
         if export_str_docking:
-            export_str += f'<DockingPorts>{export_str_thrusters}</DockingPorts>\n'
+            export_str += f'<DockingPorts>{export_str_thrusters}\n</DockingPorts>\n'
         if export_str_devices:
-            export_str += f'<DeviceSlots>{export_str_devices}</DeviceSlots>\n'
+            export_str += f'<DeviceSlots>{export_str_devices}\n</DeviceSlots>\n'
         if export_str_thrusters:
-            export_str += f'<Effects>{export_str_thrusters}</EffectS>'
+            export_str += f'<Effects>{export_str_thrusters}\n</EffectS>\n'
         print(export_str)
 
     def reset_point_controls(self):
@@ -395,6 +386,23 @@ class SpriteViewer:
             return 0
         else:
             return int(self._rot_slider.get())
+        
+    def refresh_polar_point_info(self):
+        selected_index = self.points_listbox.curselection()
+        if not selected_index:
+            i = self._selected_idx
+        else:
+            #we can only edit one at a time, so we only take the first
+            i = selected_index[0]
+        if i < 0:
+            return
+
+        point: Point = self._points[i]
+        polar = point.polar_coord
+        a = round(math.degrees(polar.a))
+        r = round(polar.r)
+        self.sv_pos_a.set(str(a))
+        self.sv_pos_r.set(str(r))
 
     def set_current_point_controls(self):
         self._point_controls_locked = True
@@ -405,7 +413,6 @@ class SpriteViewer:
             #we can only edit one at a time, so we only take the first
             i = selected_index[0]
         if i < 0:
-            print("no valid index selected")
             return
 
         point: Point = self._points[i]
@@ -413,13 +420,11 @@ class SpriteViewer:
         x = projected.x
         y = projected.y
         polar = point.polar_coord
-        a = math.degrees(polar.a)
-        r = round(polar.r)
         z = polar.z
 
         pt = point.point_type
 
-        print(i, type(point), pt, x, y, a, r, z)
+        #print(i, type(point), pt, x, y, a, r, z)
 
         self.reset_point_controls()
 
@@ -434,8 +439,8 @@ class SpriteViewer:
         self.pos_y_entry.configure(state = NORMAL)
         self.sv_pos_z.set(str(z))
         self.pos_z_entry.configure(state = NORMAL)
-        self.sv_pos_a.set(str(a))
-        self.sv_pos_r.set(str(r))
+
+        self.refresh_polar_point_info()
 
         if isinstance(point, PointDevice) or isinstance(point, PointThuster):
             direction = point.direction
@@ -463,7 +468,7 @@ class SpriteViewer:
             self.pos_arc_st_entry.configure(state = DISABLED)
             self.pos_arc_en_entry.configure(state = DISABLED)
 
-        print(point.mirror.x, point.mirror.y, point.mirror.z)
+        #print(point.mirror.x, point.mirror.y, point.mirror.z)
         if point.mirror.x:
             self.mirror_x_check.select()
         else:
@@ -505,7 +510,6 @@ class SpriteViewer:
             #we can only edit one at a time, so we only take the first
             i = selected_index[0]
         if i < 0:
-            print("no valid index selected")
             return
 
         xs = self.pos_x_entry.get()
@@ -546,6 +550,7 @@ class SpriteViewer:
             self.points_listbox.delete(i)
             self.points_listbox.insert(i, str(point))
 
+        #self.set_current_point_controls()
         self.display_sprite()
 
     def update_point_arcs(self, event: Event|None = None):
@@ -560,7 +565,6 @@ class SpriteViewer:
             #we can only edit one at a time, so we only take the first
             i = selected_index[0]
         if i < 0:
-            print("no valid index selected")
             return
         
         point: Point = self._points[i]
@@ -593,6 +597,7 @@ class SpriteViewer:
             elif use_arc:
                 point.arc = new_arc
 
+        #self.set_current_point_controls()
         self.display_sprite()
 
     def update_point_mirror(self, event: Event|None = None):
@@ -607,7 +612,6 @@ class SpriteViewer:
             #we can only edit one at a time, so we only take the first
             i = selected_index[0]
         if i < 0:
-            print("no valid index selected")
             return
         
         m_x = bool(self.iv_mirror_x.get())
@@ -629,7 +633,6 @@ class SpriteViewer:
             #we can only edit one at a time, so we only take the first
             i = selected_index[0]
         if i < 0:
-            print("no valid index selected")
             return
 
         pt: PointType = PointType(self.sv_point_type.get())
@@ -645,7 +648,7 @@ class SpriteViewer:
         elif pt == PT_DOCK:
             new_point = PointDock(clone_point=old_point)
         else:
-            print(f"unexpectedly got point type {pt} of type {type(pt)}")
+            print(f"Err: unexpectedly got point type {pt} of type {type(pt)}")
             assert False
         
         self._points[i] = new_point
@@ -679,7 +682,6 @@ class SpriteViewer:
             #we can only edit one at a time, so we only take the first
             i = selected_index[0]
         if i < 0:
-            print("no valid index selected")
             return
 
         self.reset_point_controls()

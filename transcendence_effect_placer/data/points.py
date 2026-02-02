@@ -82,13 +82,10 @@ class Point(ABC):
                 raise ValueError("must provide a real sprite configuration when creating a point")
             self.label = label
             self.sprite_coord: SpriteCoord = coord.to_sprite(sprite_cfg) if isinstance(coord, PILCoord) else coord
-            print(self.sprite_coord)
             self.scene_coord: GSceneCoord = self.sprite_coord.to_gscene()
             self._cfg = sprite_cfg
             self.polar_coord: PXMLCoord = self.scene_coord.to_polar_XML(self._cfg, rot_frame)
-            print(self.polar_coord)
             self.scene_coord = self.polar_coord.to_gscene(self._cfg)
-            print('rotationally corrected pos:', self.scene_coord)
             self.mirror = MirrorOptions()
 
     def _to_raw_coord(self, coord: ICoord) -> ICoord:
