@@ -88,6 +88,9 @@ class Point(ABC):
             self.scene_coord = self.polar_coord.to_gscene(self._cfg)
             self.mirror = MirrorOptions()
 
+    def __str__(self):
+        return f"{self.point_type}: ({self.sprite_coord.x},{self.sprite_coord.y}) z={self.scene_coord.z}"
+
     def _to_raw_coord(self, coord: ICoord) -> ICoord:
         return ICoord(coord.x, -coord.y)
     
@@ -190,8 +193,7 @@ class Point(ABC):
         pass
 
     def _get_mirror_options(self) -> list[MirrorOptions]:
-        ret: list[MirrorOptions] = []
-        ret.append(MIRROR_NULL) #always render self
+        ret: list[MirrorOptions] = [MIRROR_NULL] #always render self
         x = self.mirror.x and self.mirror_support.x
         y = self.mirror.y and self.mirror_support.y
         z = self.mirror.z and self.mirror_support.z
