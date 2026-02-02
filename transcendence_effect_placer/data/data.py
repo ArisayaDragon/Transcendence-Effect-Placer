@@ -46,7 +46,7 @@ class CCoord:
         return f"({self.x},{self.y},{self.z})"
     
     def as_icoord(self):
-        return ICoord(self.x, self.y)
+        return ICoord(int(self.x), int(self.y))
 
 @dataclass
 class ICoord:
@@ -55,6 +55,9 @@ class ICoord:
     
     def __str__(self) -> str:
         return f"({self.x},{self.y})"
+    
+    def as_ccoord(self):
+        return CCoord(float(self.x), float(self.y), 0)
 
 @dataclass
 class PCoord:

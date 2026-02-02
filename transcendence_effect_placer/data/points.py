@@ -9,9 +9,9 @@ from transcendence_effect_placer.data.math import convert_polar_to_projection, c
 
 @dataclass
 class MirrorOptions:
-    x: bool = False
-    y: bool = False
-    z: bool = False
+    x: bool|int = False
+    y: bool|int = False
+    z: bool|int = False
 
 MIRROR_NULL = MirrorOptions()
 
@@ -26,26 +26,54 @@ PT_GENERIC = PointType("Generic")
 Coordinate systems:
 PIL: 0,0 is upper left, +x is right, +y is down <-- this is what PIL requires for drawing
 Sprite: 0,0 is center of sprite, +x is right, +y is up <-- this is what the user interacts with
-GeorgeScene: 0,0,0 is center of the sprite, +x is backwards (180 degrees from the bow), +y is PROBABLY to the port side, +z is above
-GeorgePolar: *,0 is the center of the sprite, a=0 is forwards, and a+ moves counter clockwise
+XMLPolar: *,0 is the center of the sprite, a=0 is forwards, and a+ moves counter clockwise
+GeorgeScene: 0,0,0 is center of the sprite, +x is backwards (180 degrees from the bow), +y is PROBABLY to the port side (90 degrees from the bow), +z is above
 GeorgeZ: the z position is weird and exists sort of outside most of these except the scene?
 '''
+
+class DefaultSpriteConfig(SpriteConfig):
+    def viewport_size(self):
+        return 256.0
+
+DEFAULT_CFG = DefaultSpriteConfig(0,0,102,102,0,360,20,0.2,False)  #george uses a default viewport scale of 256
+
+class PILCoord(ICoord):
+    def to_sprite(self, cfg: SpriteConfig):
+        return SpriteCoord(self.x - cfg.w//2, -(self.y - cfg.h//2))
+
+class SpriteCoord(ICoord):
+    def to_PIL(self, cfg: SpriteConfig):
+        return PILCoord(self.x + cfg.w//2, -self.y + cfg.h//2)
+    def to_gscene(self, z: float=0):
+        return GSceneCoord(-self.y, -self.x, z)
+    
+class GSceneCoord(CCoord):
+    def to_sprite(self):
+        return SpriteCoord(-round(self.y), -round(self.x))
+    def to_polar_XML(self, cfg: SpriteConfig = DEFAULT_CFG, facing: int = 0):
+        pcoord = convert_projection_to_polar(cfg, self, facing)
+        return PXMLCoord(pcoord.a, pcoord.r, pcoord.z)
+    
+class PXMLCoord(PCoord):
+    def to_gscene(self, cfg: SpriteConfig = DEFAULT_CFG):
+        icoord = convert_polar_to_projection(cfg, self)
+        return GSceneCoord(icoord.x, icoord.y, self.z)
 
 class Point(ABC):
     point_type: PointType = PT_GENERIC
     color = (0,255,0,255)
     mirror_support = MirrorOptions(0,0,0)
 
-    def __init__(self, coord: ICoord, label: str, sprite_cfg: SpriteConfig, rot_frame: int):
+    def __init__(self, coord: PILCoord|SpriteCoord, label: str, sprite_cfg: SpriteConfig, rot_frame: int):
         self.label = label
-        self.projection_coord = coord
-        print(self.projection_coord)
+        self.sprite_coord: SpriteCoord = coord.to_sprite(sprite_cfg) if isinstance(coord, PILCoord) else coord
+        print(self.sprite_coord)
+        self.scene_coord: GSceneCoord = self.sprite_coord.to_gscene()
         self._cfg = sprite_cfg
-        self.polar_coord = convert_projection_to_polar(self._cfg, self._to_raw_coord(coord), rot_frame) #we store the z-pos on the polar coord
+        self.polar_coord: PXMLCoord = self.scene_coord.to_polar_XML(self._cfg, rot_frame)
         print(self.polar_coord)
-        if rot_frame:
-            self.projection_coord = self._from_raw_coord(convert_polar_to_projection(self._cfg, self.polar_coord))
-            print('rotationally corrected pos:', self.projection_coord)
+        self.scene_coord = self.polar_coord.to_gscene(self._cfg)
+        print('rotationally corrected pos:', self.scene_coord)
         self.mirror = MirrorOptions()
 
     def _to_raw_coord(self, coord: ICoord) -> ICoord:
@@ -54,24 +82,22 @@ class Point(ABC):
     def _from_raw_coord(self, coord: ICoord) -> ICoord:
         return ICoord(coord.x, -coord.y)
 
-    def update_from_polar(self, coord: PCoord):
-        self.polar_coord = coord
-        raw_coord = convert_polar_to_projection(self._cfg, coord)
-        self.projection_coord = self._from_raw_coord(raw_coord)
+    def update_from_polar(self, coord: PXMLCoord|PCoord):
+        self.polar_coord = coord if isinstance(coord, PXMLCoord) else PXMLCoord(coord.a, coord.r, coord.z)
+        self.scene_coord = self.polar_coord.to_gscene(self._cfg)
+        self.sprite_coord = self.scene_coord.to_sprite()
 
-    def update_from_projection(self, coord: ICoord, rot_frame: int = 0):
-        packed_coord = self._to_raw_coord(CCoord(coord.x, coord.y, self.polar_coord.z))
-        self.polar_coord = convert_projection_to_polar(self._cfg, packed_coord, rot_frame)
-        if rot_frame:
-            self.projection_coord = self._from_raw_coord(convert_polar_to_projection(self._cfg, self.polar_coord))
-        else:
-            self.projection_coord = coord
+    def update_from_projection(self, coord: SpriteCoord, rot_frame: int = 0):
+        self.scene_coord = coord.to_gscene(self.scene_coord.z)
+        self.polar_coord = self.scene_coord.to_polar_XML(self._cfg, rot_frame)
+        self.scene_coord = self.polar_coord.to_gscene(self._cfg)
+        self.sprite_coord = self.scene_coord.to_sprite()
 
     def pil_coord(self, coord: ICoord) -> ICoord:
         return ICoord(-1*coord.x + round(self._cfg.w/2), coord.y + round(self._cfg.h/2))
     
     def __str__(self) -> str:
-        return str(self.point_type) + ' ' + self.label + ': ' + repr(self.projection_coord)
+        return str(self.point_type) + ' ' + self.label + ': ' + repr(self.sprite_coord)
     
     def set_mirror_x(self, mirror=True):
         self.mirror.x = mirror
@@ -99,12 +125,12 @@ class Point(ABC):
         self.update_from_polar(self.polar_coord)
 
     def set_x(self, x:int = 0):
-        self.projection_coord.x = x
-        self.update_from_projection(self.projection_coord)
+        self.sprite_coord.x = x
+        self.update_from_projection(self.sprite_coord)
 
     def set_y(self, y:int = 0):
-        self.projection_coord.y = y
-        self.update_from_projection(self.projection_coord)
+        self.sprite_coord.y = y
+        self.update_from_projection(self.sprite_coord)
 
     def _mirror_angle_degrees(self, degrees: float, mirror: MirrorOptions) -> float:
         #convert to transcendence ship angle, which is -90 degrees offset
@@ -181,13 +207,13 @@ class PointDock(Point):
     mirror_support = MirrorOptions(1,1,0)
     
     def to_xml(self):
-        ret = f'<Port x="{self.projection_coord.x}"\ty="{self.projection_coord.y}"/>'
+        ret = f'<Port x="{self.sprite_coord.x}"\ty="{self.sprite_coord.y}"/>'
         if self.mirror.x:
-            ret += f'\n<Port x="{self.projection_coord.x * -1}"\ty="{self.projection_coord.y}"/>'
+            ret += f'\n<Port x="{self.sprite_coord.x * -1}"\ty="{self.sprite_coord.y}"/>'
         if self.mirror.y:
-            ret += f'\n<Port x="{self.projection_coord.x}"\ty="{self.projection_coord.y * -1}"/>'
+            ret += f'\n<Port x="{self.sprite_coord.x}"\ty="{self.sprite_coord.y * -1}"/>'
         if self.mirror.x and self.mirror.y:
-            ret += f'\n<Port x="{self.projection_coord.x * -1}"\ty="{self.projection_coord.y * -1}"/>'
+            ret += f'\n<Port x="{self.sprite_coord.x * -1}"\ty="{self.sprite_coord.y * -1}"/>'
         return ret
     
     def render_to_image(self, image, rotation_dir):
@@ -207,7 +233,7 @@ class PointThuster(Point):
     color = (255,255,0,255)
     mirror_support = MirrorOptions(1,0,1)
 
-    def __init__(self, coord: ICoord, label: str, sprite_cfg: SpriteConfig, rot_frame: int, direction: int = 0):
+    def __init__(self, coord: PILCoord|SpriteCoord, label: str, sprite_cfg: SpriteConfig, rot_frame: int, direction: int = 0):
         '''
         Docstring for __init__
         
@@ -307,7 +333,7 @@ class PointDevice(Point):
     color_arc = (255,0,0,255)
     mirror_support = MirrorOptions(1,1,1)
 
-    def __init__(self, coord: ICoord, label: str, sprite_cfg: SpriteConfig, rot_frame: int, direction: int = 0, arc: int = -1, arc_start: int=-1, arc_end: int=-1):
+    def __init__(self, coord: PILCoord|SpriteCoord, label: str, sprite_cfg: SpriteConfig, rot_frame: int, direction: int = 0, arc: int = -1, arc_start: int=-1, arc_end: int=-1):
         super().__init__(coord, label, sprite_cfg, rot_frame)
         self.direction = direction
         self.arc_start = arc_start
