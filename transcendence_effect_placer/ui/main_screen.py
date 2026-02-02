@@ -564,10 +564,17 @@ class SpriteViewer:
         z = int(zs)
 
         point: Point = self._points[i]
-        point.set_z(z)
-        point.update_from_projection(SpriteCoord(x, y))
-        self.points_listbox.delete(i)
-        self.points_listbox.insert(i, str(point))
+        updated = False
+        if z != point.scene_coord.z:
+            point.set_z(z)
+            updated = True
+        elif x != point.sprite_coord.x or y != point.sprite_coord.y:
+            point.update_from_projection(SpriteCoord(x, y))
+            updated = True
+            
+        if updated:
+            self.points_listbox.delete(i)
+            self.points_listbox.insert(i, str(point))
 
         self.display_sprite()
 
@@ -603,7 +610,7 @@ class SpriteViewer:
             new_start_s = self.sv_pos_arc_st.get()
             new_start = int(new_start_s if new_start_s else -2)
             new_end_s = self.sv_pos_arc_en.get()
-            new_end = int(new_start_s if new_start_s else -2)
+            new_end = int(new_end_s if new_end_s else -2)
 
             if old_arc != new_arc:
                 use_arc = new_arc != -2

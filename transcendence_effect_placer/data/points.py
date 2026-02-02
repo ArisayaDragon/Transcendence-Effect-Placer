@@ -1,4 +1,4 @@
-
+from __future__ import annotations
 from abc import ABC, abstractmethod
 import math
 from PIL.ImageDraw import ImageDraw
@@ -64,17 +64,32 @@ class Point(ABC):
     color = (0,255,0,255)
     mirror_support = MirrorOptions(0,0,0)
 
-    def __init__(self, coord: PILCoord|SpriteCoord, label: str, sprite_cfg: SpriteConfig, rot_frame: int):
-        self.label = label
-        self.sprite_coord: SpriteCoord = coord.to_sprite(sprite_cfg) if isinstance(coord, PILCoord) else coord
-        print(self.sprite_coord)
-        self.scene_coord: GSceneCoord = self.sprite_coord.to_gscene()
-        self._cfg = sprite_cfg
-        self.polar_coord: PXMLCoord = self.scene_coord.to_polar_XML(self._cfg, rot_frame)
-        print(self.polar_coord)
-        self.scene_coord = self.polar_coord.to_gscene(self._cfg)
-        print('rotationally corrected pos:', self.scene_coord)
-        self.mirror = MirrorOptions()
+    def __init__(self, coord: PILCoord|SpriteCoord|None = None, label: str|None = None, sprite_cfg: SpriteConfig = DEFAULT_CFG, rot_frame: int = 0, clone_point: Point|None = None):
+        #if cloning, ignore everything else
+        if clone_point:
+            self.label = clone_point.label
+            self.sprite_coord = clone_point.sprite_coord
+            self.scene_coord = clone_point.scene_coord
+            self.polar_coord = clone_point.polar_coord
+            self.mirror = MirrorOptions()
+            self._cfg = clone_point._cfg
+        else:
+            if coord is None:
+                raise ValueError("coord was not provided")
+            if label is None:
+                raise ValueError("label was not provided")
+            if not sprite_cfg.real:
+                raise ValueError("must provide a real sprite configuration when creating a point")
+            self.label = label
+            self.sprite_coord: SpriteCoord = coord.to_sprite(sprite_cfg) if isinstance(coord, PILCoord) else coord
+            print(self.sprite_coord)
+            self.scene_coord: GSceneCoord = self.sprite_coord.to_gscene()
+            self._cfg = sprite_cfg
+            self.polar_coord: PXMLCoord = self.scene_coord.to_polar_XML(self._cfg, rot_frame)
+            print(self.polar_coord)
+            self.scene_coord = self.polar_coord.to_gscene(self._cfg)
+            print('rotationally corrected pos:', self.scene_coord)
+            self.mirror = MirrorOptions()
 
     def _to_raw_coord(self, coord: ICoord) -> ICoord:
         return ICoord(coord.x, -coord.y)
@@ -157,8 +172,8 @@ class Point(ABC):
         adj_dir = math.radians(adj_dir_deg)
         adj_rad = self.polar_coord.r
         adj_z = self.polar_coord.z * (-1 if mirror.z else 1)
-        adjusted_direction = PCoord(adj_dir, adj_rad, adj_z)
-        return self.pil_coord(convert_polar_to_projection(self._cfg, adjusted_direction))
+        adjusted_direction = PXMLCoord(adj_dir, adj_rad, adj_z)
+        return adjusted_direction.to_gscene(self._cfg).to_sprite().to_PIL(self._cfg)
     
     @abstractmethod
     def to_xml(self) -> str:
@@ -233,7 +248,7 @@ class PointThuster(Point):
     color = (255,255,0,255)
     mirror_support = MirrorOptions(1,0,1)
 
-    def __init__(self, coord: PILCoord|SpriteCoord, label: str, sprite_cfg: SpriteConfig, rot_frame: int, direction: int = 0):
+    def __init__(self, coord: PILCoord|SpriteCoord|None = None, label: str|None = None, sprite_cfg: SpriteConfig = DEFAULT_CFG, rot_frame: int = 0, direction: int = 0, clone_point: Point|None = None):
         '''
         Docstring for __init__
         
@@ -246,7 +261,7 @@ class PointThuster(Point):
         :param direction: direction thruster is facing (in degrees)
         :type direction: int
         '''
-        super().__init__(coord, label, sprite_cfg, rot_frame)
+        super().__init__(coord, label, sprite_cfg, rot_frame, clone_point)
         self.direction = direction
         self.under_over = [0 for i in range(sprite_cfg.rot_frames)]
 
