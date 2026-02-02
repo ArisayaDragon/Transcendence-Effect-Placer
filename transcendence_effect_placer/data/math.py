@@ -13,8 +13,11 @@ _MIN_DEN = 0.1
 def convert_polar_to_projection(sprite_cfg: SpriteConfig, coord: PCoord) -> ICoord:
     scale = sprite_cfg.viewport_size()
 
-    x = math.cos(coord.a) * coord.r / scale
-    y = math.sin(coord.a) * coord.r / scale
+    r = coord.r
+    a = coord.a
+
+    x = math.cos(a) * r / scale
+    y = math.sin(a) * r / scale
     z = coord.z * -1 / scale
 
     #global coordinate conversion
@@ -46,6 +49,7 @@ def convert_projection_to_polar(sprite_cfg: SpriteConfig, coord: CCoord|ICoord, 
 
     den = py * _K1 - d * _K2
     if den < _MIN_DEN:
+        print('min den')
         den = _MIN_DEN
 
     y = (-(z * _K1 * d) - (py * z * _K2) - (2.0 * py))/den
@@ -54,12 +58,14 @@ def convert_projection_to_polar(sprite_cfg: SpriteConfig, coord: CCoord|ICoord, 
 
     ox = x * scale
     oy = y * scale
-    print("conversion:", py, y, oy, px, x, ox, scale)
 
     rotation_offset = rotation_frame * (360 / sprite_cfg.rot_frames)
 
     a = math.atan2(oy, ox) + math.radians(rotation_offset)
     r = (px*px + py*py) ** 0.5
+
+    ad = round(math.degrees(a))
+    print(ad, r, z)
     return PCoord(a, r, coord.z)
 
 '''

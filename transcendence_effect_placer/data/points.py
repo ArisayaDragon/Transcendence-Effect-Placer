@@ -39,17 +39,17 @@ DEFAULT_CFG = DefaultSpriteConfig(0,0,102,102,0,360,20,0.2,False)  #george uses 
 
 class PILCoord(ICoord):
     def to_sprite(self, cfg: SpriteConfig):
-        return SpriteCoord(self.x - cfg.w//2, -(self.y - cfg.h//2))
+        return SpriteCoord(self.x - cfg.w//2, -self.y + cfg.h//2)
 
 class SpriteCoord(ICoord):
     def to_PIL(self, cfg: SpriteConfig):
-        return PILCoord(self.x + cfg.w//2, -self.y + cfg.h//2)
+        return PILCoord(-self.x + cfg.w//2, self.y + cfg.h//2)
     def to_gscene(self, z: float=0):
-        return GSceneCoord(-self.y, -self.x, z)
+        return GSceneCoord(self.x, self.y, z)
     
 class GSceneCoord(CCoord):
     def to_sprite(self):
-        return SpriteCoord(-round(self.y), -round(self.x))
+        return SpriteCoord(round(self.x), round(self.y))
     def to_polar_XML(self, cfg: SpriteConfig = DEFAULT_CFG, facing: int = 0):
         pcoord = convert_projection_to_polar(cfg, self, facing)
         return PXMLCoord(pcoord.a, pcoord.r, pcoord.z)
@@ -71,7 +71,7 @@ class Point(ABC):
             self.sprite_coord = clone_point.sprite_coord
             self.scene_coord = clone_point.scene_coord
             self.polar_coord = clone_point.polar_coord
-            self.mirror = MirrorOptions()
+            self.mirror = clone_point.mirror
             self._cfg = clone_point._cfg
         else:
             if coord is None:
@@ -98,15 +98,21 @@ class Point(ABC):
         return ICoord(coord.x, -coord.y)
 
     def update_from_polar(self, coord: PXMLCoord|PCoord):
+        '''Not recommended, because roundoff can cause the sprite x and y to move'''
         self.polar_coord = coord if isinstance(coord, PXMLCoord) else PXMLCoord(coord.a, coord.r, coord.z)
         self.scene_coord = self.polar_coord.to_gscene(self._cfg)
         self.sprite_coord = self.scene_coord.to_sprite()
 
     def update_from_projection(self, coord: SpriteCoord, rot_frame: int = 0):
+        self.sprite_coord = coord
         self.scene_coord = coord.to_gscene(self.scene_coord.z)
         self.polar_coord = self.scene_coord.to_polar_XML(self._cfg, rot_frame)
         self.scene_coord = self.polar_coord.to_gscene(self._cfg)
-        self.sprite_coord = self.scene_coord.to_sprite()
+
+    def _update(self):
+        self.scene_coord = self.sprite_coord.to_gscene(self.scene_coord.z)
+        self.polar_coord = self.scene_coord.to_polar_XML(self._cfg, 0)
+        self.scene_coord = self.polar_coord.to_gscene(self._cfg)
 
     def pil_coord(self, coord: ICoord) -> ICoord:
         return ICoord(-1*coord.x + round(self._cfg.w/2), coord.y + round(self._cfg.h/2))
@@ -124,18 +130,21 @@ class Point(ABC):
         self.mirror.z = mirror
 
     def set_z(self, z:int = 0):
-        self.polar_coord.z = z
-        self.update_from_polar(self.polar_coord)
+        self.scene_coord.z = z
+        self._update()
 
     def set_radius(self, radius: float = 0.0):
+        '''Not recommended, because roundoff can cause the sprite x and y to move'''
         self.polar_coord.r = radius
         self.update_from_polar(self.polar_coord)
 
     def set_pos_angle(self, pos_angle: float = 0.0):
+        '''Not recommended, because roundoff can cause the sprite x and y to move'''
         self.polar_coord.r = pos_angle
         self.update_from_polar(self.polar_coord)
 
     def set_pos_angle_deg(self, pos_angle_degrees: float = 0.0):
+        '''Not recommended, because roundoff can cause the sprite x and y to move'''
         self.polar_coord.r = math.radians(pos_angle_degrees)
         self.update_from_polar(self.polar_coord)
 
@@ -262,7 +271,10 @@ class PointThuster(Point):
         :type direction: int
         '''
         super().__init__(coord, label, sprite_cfg, rot_frame, clone_point)
-        self.direction = direction
+        if isinstance(clone_point, PointDevice) or isinstance(clone_point, PointThuster):
+            self.direction = clone_point.direction
+        else:
+            self.direction = direction
         self.under_over = [0 for i in range(sprite_cfg.rot_frames)]
 
     def set_direction(self, direction: int):
@@ -348,12 +360,20 @@ class PointDevice(Point):
     color_arc = (255,0,0,255)
     mirror_support = MirrorOptions(1,1,1)
 
-    def __init__(self, coord: PILCoord|SpriteCoord, label: str, sprite_cfg: SpriteConfig, rot_frame: int, direction: int = 0, arc: int = -1, arc_start: int=-1, arc_end: int=-1):
-        super().__init__(coord, label, sprite_cfg, rot_frame)
-        self.direction = direction
-        self.arc_start = arc_start
-        self.arc_end = arc_end
-        self.arc = arc
+    def __init__(self, coord: PILCoord|SpriteCoord|None = None, label: str|None = None, sprite_cfg: SpriteConfig = DEFAULT_CFG, rot_frame: int = 0, direction: int = 0, arc: int = -1, arc_start: int=-1, arc_end: int=-1, clone_point: Point|None = None):
+        super().__init__(coord, label, sprite_cfg, rot_frame, clone_point)
+        if isinstance(clone_point, PointDevice) or isinstance(clone_point, PointThuster):
+            self.direction = clone_point.direction
+        else:
+            self.direction = direction
+        if isinstance(clone_point, PointDevice):
+            self.arc = clone_point.arc
+            self.arc_start = clone_point.arc_start
+            self.arc_end = clone_point.arc_end
+        else:
+            self.arc_start = arc_start
+            self.arc_end = arc_end
+            self.arc = arc
 
     def set_direction(self, direction: int):
         self.direction = direction

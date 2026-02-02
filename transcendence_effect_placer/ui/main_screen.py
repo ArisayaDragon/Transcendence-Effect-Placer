@@ -6,6 +6,7 @@ import PIL
 from PIL.ImageFile import ImageFile
 from PIL.ImageDraw import ImageDraw
 from PIL.Image import Image
+import math
 import numpy as np
 from time import sleep
 from typing import Callable
@@ -100,39 +101,6 @@ class SpriteViewer:
         pos_x_label.pack(side=RIGHT)
 
         self._image_display.bind("<Button-1>", self.add_point)
-
-    def _change_point_type(self):
-        selected_index = self.points_listbox.curselection()
-        if not selected_index:
-            i = self._selected_idx
-        else:
-            #we can only edit one at a time, so we only take the first
-            i = selected_index[0]
-        if i < 0:
-            print("no valid index selected")
-            return
-
-        pt: PointType = PointType(self.sv_point_type.get())
-
-        old_point = self._points[i]
-        if old_point.point_type == pt:
-            return
-
-        if pt == PT_DEVICE:
-            new_point = PointDevice(old_point.sprite_coord, old_point.label, self._sprite_cfg, 0)
-        elif pt == PT_THRUSTER:
-            new_point = PointThuster(old_point.sprite_coord, old_point.label, self._sprite_cfg, 0)
-        elif pt == PT_DOCK:
-            new_point = PointDock(old_point.sprite_coord, old_point.label, self._sprite_cfg, 0)
-        else:
-            print(f"unexpectedly got point type {pt} of type {type(pt)}")
-            assert False
-        
-        self._points[i] = new_point
-        self.points_listbox.delete(i)
-        self.points_listbox.insert(i, str(new_point))
-        self.set_current_point_controls()
-        self.display_sprite()
 
     def _init_control_frame(self):
         def make_sv_callback(sv: StringVar, entry: Entry, validation_fn: Callable[[str], bool] = validate_null):
@@ -445,8 +413,8 @@ class SpriteViewer:
         x = projected.x
         y = projected.y
         polar = point.polar_coord
-        a = polar.a
-        r = polar.r
+        a = math.degrees(polar.a)
+        r = round(polar.r)
         z = polar.z
 
         pt = point.point_type
@@ -569,9 +537,11 @@ class SpriteViewer:
             point.set_z(z)
             updated = True
         elif x != point.sprite_coord.x or y != point.sprite_coord.y:
+            z = point.scene_coord.z
             point.update_from_projection(SpriteCoord(x, y))
+            point.set_z(z)
             updated = True
-            
+
         if updated:
             self.points_listbox.delete(i)
             self.points_listbox.insert(i, str(point))
@@ -651,6 +621,50 @@ class SpriteViewer:
 
         self.display_sprite()
 
+    def _change_point_type(self):
+        selected_index = self.points_listbox.curselection()
+        if not selected_index:
+            i = self._selected_idx
+        else:
+            #we can only edit one at a time, so we only take the first
+            i = selected_index[0]
+        if i < 0:
+            print("no valid index selected")
+            return
+
+        pt: PointType = PointType(self.sv_point_type.get())
+
+        old_point = self._points[i]
+        if old_point.point_type == pt:
+            return
+
+        if pt == PT_DEVICE:
+            new_point = PointDevice(clone_point=old_point)
+        elif pt == PT_THRUSTER:
+            new_point = PointThuster(clone_point=old_point)
+        elif pt == PT_DOCK:
+            new_point = PointDock(clone_point=old_point)
+        else:
+            print(f"unexpectedly got point type {pt} of type {type(pt)}")
+            assert False
+        
+        self._points[i] = new_point
+        self.points_listbox.delete(i)
+        self.points_listbox.insert(i, str(new_point))
+        self.set_current_point_controls()
+        self.display_sprite()
+
+    def add_point(self, event: Event[Label]):
+        if self._point_controls_locked:
+            return
+        coord = PILCoord(event.x, event.y)
+        point = PointGeneric(coord, str(len(self._points)), self._sprite_cfg, self.get_cur_rot_frame())
+        self._points.append(point)
+        self.points_listbox.insert(END, str(point))
+        self._selected_idx = len(self._points) - 1
+        self.set_current_point_controls()
+        self.display_sprite()
+
     def delete_point(self):
         if self._point_controls_locked:
             return
@@ -686,17 +700,6 @@ class SpriteViewer:
 
         if self._selected_idx >= 0:
             self.set_current_point_controls()
-        self.display_sprite()
-
-    def add_point(self, event: Event[Label]):
-        if self._point_controls_locked:
-            return
-        coord = PILCoord(event.x, event.y)
-        point = PointGeneric(coord, str(len(self._points)), self._sprite_cfg, self.get_cur_rot_frame())
-        self._points.append(point)
-        self.points_listbox.insert(END, str(point))
-        self._selected_idx = len(self._points) - 1
-        self.set_current_point_controls()
         self.display_sprite()
 
     def refresh_main_window(self):
