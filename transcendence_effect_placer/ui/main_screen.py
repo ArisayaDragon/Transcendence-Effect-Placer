@@ -14,6 +14,7 @@ from typing import Callable
 from transcendence_effect_placer.common.validation import validate_numeral, validate_numeral_non_negative, validate_null
 from transcendence_effect_placer.data.data import SpriteConfig, CCoord, ICoord, PCoord
 from transcendence_effect_placer.data.points import Point, PointGeneric, PointDevice, PointDock, PointThuster, PointType, PT_DEVICE, PT_DOCK, PT_GENERIC, PT_THRUSTER, SpriteCoord, PILCoord
+from transcendence_effect_placer.data.math import a_d, d180, d360
 from transcendence_effect_placer.ui.load_file import SpriteOpener
 from transcendence_effect_placer.ui.sprite_settings import SpriteSettingsDialogue
 
@@ -24,6 +25,8 @@ RED = "#FF0000"
 BLACK = "#000000"
 
 SV_WRITE = "write"
+
+TRANSCENDENCE_ANGULAR_OFFSET = 90
 
 class SpriteMode(str): pass
 
@@ -124,6 +127,28 @@ class SpriteViewer:
                 elif isinstance(entry, Entry) and not valid:
                     entry.configure(fg=RED)
             return sv_callback
+        
+        def make_sv_callback_polar(sv: StringVar, entry: Entry, validation_fn: Callable[[str], bool] = validate_null):
+            def sv_callback(var_name, index, mode):
+                s = sv.get()
+                valid = validation_fn(s)
+                if valid:
+                    entry.configure(fg=BLACK)
+                    self.update_point_polar() #does a general validation check on all inputs, in event a bad input was left
+                elif isinstance(entry, Entry) and not valid:
+                    entry.configure(fg=RED)
+            return sv_callback
+        
+        def make_sv_callback_z(sv: StringVar, entry: Entry, validation_fn: Callable[[str], bool] = validate_null):
+            def sv_callback(var_name, index, mode):
+                s = sv.get()
+                valid = validation_fn(s)
+                if valid:
+                    entry.configure(fg=BLACK)
+                    self.update_point_z() #does a general validation check on all inputs, in event a bad input was left
+                elif isinstance(entry, Entry) and not valid:
+                    entry.configure(fg=RED)
+            return sv_callback
 
         self.points_listbox = Listbox(self.control_frame)
         self.points_listbox.pack(fill=BOTH, expand=True)
@@ -172,7 +197,7 @@ class SpriteViewer:
 
         self.sv_pos_z = StringVar()
         self.pos_z_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_z, state=DISABLED)
-        self.sv_pos_z.trace_add(SV_WRITE, make_sv_callback(self.sv_pos_z, self.pos_z_entry, validate_numeral))
+        self.sv_pos_z.trace_add(SV_WRITE, make_sv_callback_z(self.sv_pos_z, self.pos_z_entry, validate_numeral))
 
         pos_z_label.grid(row=r, column=0)
         self.pos_z_entry.grid(row=r, column=1)
@@ -183,13 +208,13 @@ class SpriteViewer:
 
         self.sv_pos_a = StringVar()
         self.pos_a_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_a, state=DISABLED)
-        self.sv_pos_a.trace_add(SV_WRITE, make_sv_callback(self.sv_pos_a, self.pos_a_entry, validate_numeral))
+        self.sv_pos_a.trace_add(SV_WRITE, make_sv_callback_polar(self.sv_pos_a, self.pos_a_entry, validate_numeral))
 
         pos_r_label = Label(self.update_point_frame, text="Radius")
 
         self.sv_pos_r = StringVar()
         self.pos_r_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_r, state=DISABLED)
-        self.sv_pos_r.trace_add(SV_WRITE, make_sv_callback(self.sv_pos_r, self.pos_r_entry, validate_numeral))
+        self.sv_pos_r.trace_add(SV_WRITE, make_sv_callback_polar(self.sv_pos_r, self.pos_r_entry, validate_numeral))
 
         pos_a_label.grid(row=r, column=0)
         self.pos_a_entry.grid(row=r, column=1)
@@ -399,7 +424,7 @@ class SpriteViewer:
 
         point: Point = self._points[i]
         polar = point.polar_coord
-        a = round(math.degrees(polar.a))
+        a = d180(math.degrees(polar.a) + TRANSCENDENCE_ANGULAR_OFFSET)
         r = round(polar.r)
         self.sv_pos_a.set(str(a))
         self.sv_pos_r.set(str(r))
@@ -434,13 +459,15 @@ class SpriteViewer:
         self.point_type_dock.configure(state = NORMAL)
 
         self.sv_pos_x.set(str(x))
-        self.pos_x_entry.configure(state = NORMAL)
+        self.pos_x_entry.configure(state = DISABLED if point.uses_polar_inputs else NORMAL)
         self.sv_pos_y.set(str(y))
-        self.pos_y_entry.configure(state = NORMAL)
+        self.pos_y_entry.configure(state = DISABLED if point.uses_polar_inputs else NORMAL)
         self.sv_pos_z.set(str(z))
-        self.pos_z_entry.configure(state = NORMAL)
+        self.pos_z_entry.configure(state = NORMAL if point.uses_z_input else DISABLED)
 
         self.refresh_polar_point_info()
+        self.pos_a_entry.configure(state = NORMAL if point.uses_polar_inputs else DISABLED)
+        self.pos_r_entry.configure(state = NORMAL if point.uses_polar_inputs else DISABLED)
 
         if isinstance(point, PointDevice) or isinstance(point, PointThuster):
             direction = point.direction
@@ -552,6 +579,83 @@ class SpriteViewer:
 
         #self.set_current_point_controls()
         self.display_sprite()
+
+    def update_point_z(self, event: Event|None = None):
+        if self._point_controls_locked:
+            return
+        #the index is actually a tuple of all selected items in the list
+        #but our list only selects 1 so it doesnt matter
+        selected_index = self.points_listbox.curselection()
+        if not selected_index:
+            i = self._selected_idx
+        else:
+            #we can only edit one at a time, so we only take the first
+            i = selected_index[0]
+        if i < 0:
+            return
+        
+        point: Point = self._points[i]
+        if point.uses_polar_inputs:
+            self.update_point_polar(event)
+        else:
+            self.update_point(event)
+
+    def update_point_polar(self, event: Event|None = None):
+        if self._point_controls_locked:
+            return
+        #the index is actually a tuple of all selected items in the list
+        #but our list only selects 1 so it doesnt matter
+        selected_index = self.points_listbox.curselection()
+        if not selected_index:
+            i = self._selected_idx
+        else:
+            #we can only edit one at a time, so we only take the first
+            i = selected_index[0]
+        if i < 0:
+            return
+
+        as_ = self.pos_a_entry.get()
+        rs = self.pos_r_entry.get()
+        zs = self.pos_z_entry.get()
+
+        #fail if any are not parsable
+        failed = False
+
+        if not as_.strip('-').isnumeric():
+            failed = True
+
+        if not rs.strip('-').isnumeric():
+            failed = True
+
+        if not zs.strip('-').isnumeric():
+            failed = True
+
+        if failed:
+            return
+        
+        a = int(as_)
+        a -= TRANSCENDENCE_ANGULAR_OFFSET
+        ar = math.radians(a)
+        r = int(rs)
+        z = int(zs)
+
+        point: Point = self._points[i]
+        updated = False
+        if z != point.scene_coord.z:
+            point.update_from_polar(PCoord(point.polar_coord.a,point.polar_coord.r,z))
+            updated = True
+        elif ar != point.polar_coord.a or r != point.polar_coord.r:
+            z = point.scene_coord.z
+            point.update_from_polar(PCoord(ar,r,z))
+            updated = True
+
+        if updated:
+            self.points_listbox.delete(i)
+            self.points_listbox.insert(i, str(point))
+
+        #self.set_current_point_controls()
+        self.display_sprite()
+
 
     def update_point_arcs(self, event: Event|None = None):
         if self._point_controls_locked:

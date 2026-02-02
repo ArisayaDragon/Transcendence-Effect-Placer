@@ -51,18 +51,30 @@ class GSceneCoord(CCoord):
     def to_sprite(self):
         return SpriteCoord(round(self.x), round(self.y))
     def to_polar_XML(self, cfg: SpriteConfig = DEFAULT_CFG, facing: int = 0):
+        '''
+        Converting projection to polar is buggy due to trignometry edgecases
+        that were not handled well in the original code
+
+        Probably why the base game doesnt use them?
+
+        Anyways avoid using this function once the user has set the point
+        Its ok if the original point is off, since the user can adjust it
+        But once its set, we just have the user use polar adjustment instead
+        '''
         pcoord = convert_projection_to_polar(cfg, self, facing)
         return PXMLCoord(pcoord.a, pcoord.r, pcoord.z)
     
 class PXMLCoord(PCoord):
     def to_gscene(self, cfg: SpriteConfig = DEFAULT_CFG):
-        icoord = convert_polar_to_projection(cfg, self)
-        return GSceneCoord(icoord.x, icoord.y, self.z)
+        ccoord = convert_polar_to_projection(cfg, self)
+        return GSceneCoord(ccoord.x, ccoord.y, ccoord.z)
 
 class Point(ABC):
     point_type: PointType = PT_GENERIC
     color = (0,255,0,255)
     mirror_support = MirrorOptions(0,0,0)
+    uses_polar_inputs = True
+    uses_z_input = True
 
     def __init__(self, coord: PILCoord|SpriteCoord|None = None, label: str|None = None, sprite_cfg: SpriteConfig = DEFAULT_CFG, rot_frame: int = 0, clone_point: Point|None = None):
         #if cloning, ignore everything else
@@ -228,6 +240,8 @@ class PointDock(Point):
     point_type = PT_DOCK
     color = (0,0,255,255)
     mirror_support = MirrorOptions(1,1,0)
+    uses_polar_inputs = False
+    uses_z_input = False
     
     def to_xml(self):
         ret = f'<Port x="{self.sprite_coord.x}"\ty="{self.sprite_coord.y}"/>'
