@@ -9,7 +9,7 @@ from PIL.Image import Image
 import math
 import numpy as np
 from time import sleep
-from typing import Callable
+from typing import Callable, Literal
 
 from transcendence_effect_placer.common.validation import validate_numeral, validate_numeral_non_negative, validate_null
 from transcendence_effect_placer.data.data import SpriteConfig, CCoord, ICoord, PCoord
@@ -59,32 +59,70 @@ class CoordinateUI:
         self._min = min
         self._max = max
         self.value: str = str(min)
-        self._frame = Frame(self.parent)
-        pos_x_label = Label(self._frame, text=label)
+        self.frame = Frame(self.parent)
+        pos_x_label = Label(self.frame, text=label)
         pos_x_label.pack(side=LEFT)
         if max < min: max = min
-        self._slider = Scale(self._frame, from_=min, to=max, orient=tk.HORIZONTAL, length=200, command=self._slider_cb)
+        self._slider = Scale(self.frame, from_=min, to=max, orient=tk.HORIZONTAL, length=200, command=self._slider_cb)
         self._slider.pack(side=LEFT)
         self._var = StringVar()
-        self._entry = Entry(self._frame, textvariable=self._var, state=DISABLED)
+        self._entry = Entry(self.frame, textvariable=self._var, state=DISABLED)
         self._var.trace_add(SV_WRITE, self._trace_cb)
         self._entry.pack(side=LEFT)
+        self._state: Literal['disabled', 'normal'] = DISABLED
+        self.set_state(DISABLED)
 
-    def set_state(self, state: str):
+    def set_state(self, state: Literal['disabled', 'normal']):
         self._entry.configure(state= state)
         self._slider.configure(state= state)
+        self._state = state
+
+    def set(self, v: int|float):
+        v = max(self._min, min(self._max, v))
+        self._slider.set(v)
+        self._var.set(str(v))
+        self._entry.configure(fg=BLACK)
+
+    def get(self):
+        return float(self.value)
+    
+    def get_raw(self):
+        return self._var.get()
 
     def disable(self):
         self.set_state(DISABLED)
     def enable(self):
         self.set_state(NORMAL)
 
-    def update_min_max(self, min: float|int, max: float|int):
-        self._min = min
-        self._max = max
-        self._slider.configure(min=min, max=max)
+    def update_min_max(self, min_: float|int, max_: float|int):
+        self._min = min_
+        self._max = max_
+        self._slider.configure(from_=min_, to=max_)
+        s = self._var.get()
+        valid = self._validation(s)
+        if valid:
+            v = float(s)
+            v = max(min_, min(max_, v))
+            self._slider.set(v)
+            self._var.set(str(v))
+            self._entry.configure(fg=BLACK)
+        else:
+            v = min_
+            self._slider.set(v)
+            self._var.set(str(v))
+            self._entry.configure(fg=BLACK)
+
+    def reset(self):
+        self.set((self._max + self._min) / 2)
+
+    def reset_min(self):
+        self.set(self._min)
+
+    def reset_max(self):
+        self.set(self._max)
 
     def _trace_cb(self, var_name, index, mode):
+        if self._state == DISABLED: return
         s = self._var.get()
         valid = self._validation(s)
         if valid:
@@ -97,16 +135,17 @@ class CoordinateUI:
             self._entry.configure(fg=BLACK) 
             self._slider.set(int(s))
             self.value = s
-            self._cb() #must do a general validation check on all inputs, in event a bad input was left elsewhere
+            self._cb(None) #must do a general validation check on all inputs, in event a bad input was left elsewhere
         elif not valid:
             self._entry.configure(fg=RED)
-    def _slider_cb(self):
+    def _slider_cb(self, _:str):
+        if self._state == DISABLED: return
         v = self._slider.get()
         s = str(v)
         self._var.set(s)
         self.value = s
         self._entry.configure(fg=BLACK) 
-        self._cb()
+        self._cb(None)
 
 class SpriteViewer:
     def __init__(self, root: Tk):
@@ -163,18 +202,7 @@ class SpriteViewer:
 
         self._image_display.bind("<Button-1>", self.add_point)
 
-    def _init_control_frame(self):
-        def make_sv_callback(sv: StringVar, entry: Entry, validation_fn: Callable[[str], bool] = validate_null):
-            def sv_callback(var_name, index, mode):
-                s = sv.get()
-                valid = validation_fn(s)
-                if valid:
-                    entry.configure(fg=BLACK)
-                    self.update_point() #does a general validation check on all inputs, in event a bad input was left
-                elif isinstance(entry, Entry) and not valid:
-                    entry.configure(fg=RED)
-            return sv_callback
-        
+    def _init_control_frame(self):        
         def make_sv_callback_arc(sv: StringVar, entry: Entry, validation_fn: Callable[[str], bool] = validate_null):
             def sv_callback(var_name, index, mode):
                 s = sv.get()
@@ -182,28 +210,6 @@ class SpriteViewer:
                 if valid:
                     entry.configure(fg=BLACK)
                     self.update_point_arcs() #does a general validation check on all inputs, in event a bad input was left
-                elif isinstance(entry, Entry) and not valid:
-                    entry.configure(fg=RED)
-            return sv_callback
-        
-        def make_sv_callback_polar(sv: StringVar, entry: Entry, validation_fn: Callable[[str], bool] = validate_null):
-            def sv_callback(var_name, index, mode):
-                s = sv.get()
-                valid = validation_fn(s)
-                if valid:
-                    entry.configure(fg=BLACK)
-                    self.update_point_polar() #does a general validation check on all inputs, in event a bad input was left
-                elif isinstance(entry, Entry) and not valid:
-                    entry.configure(fg=RED)
-            return sv_callback
-        
-        def make_sv_callback_z(sv: StringVar, entry: Entry, validation_fn: Callable[[str], bool] = validate_null):
-            def sv_callback(var_name, index, mode):
-                s = sv.get()
-                valid = validation_fn(s)
-                if valid:
-                    entry.configure(fg=BLACK)
-                    self.update_point_z() #does a general validation check on all inputs, in event a bad input was left
                 elif isinstance(entry, Entry) and not valid:
                     entry.configure(fg=RED)
             return sv_callback
@@ -231,53 +237,20 @@ class SpriteViewer:
         self.point_type_dock.grid(row=r, column=3)
 
         r += 1
-
-        pos_x_label = Label(self.update_point_frame, text="Pos X")
-
-        self.sv_pos_x = StringVar()
-        self.pos_x_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_x, state=DISABLED)
-        self.sv_pos_x.trace_add(SV_WRITE, make_sv_callback(self.sv_pos_x, self.pos_x_entry, validate_numeral))
-
-        pos_y_label = Label(self.update_point_frame, text="Pos Y")
-
-        self.sv_pos_y = StringVar()
-        self.pos_y_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_y, state=DISABLED)
-        self.sv_pos_y.trace_add(SV_WRITE, make_sv_callback(self.sv_pos_y, self.pos_y_entry, validate_numeral))
-
-        pos_x_label.grid(row=r, column=0)
-        self.pos_x_entry.grid(row=r, column=1)
-        pos_y_label.grid(row=r, column=2)
-        self.pos_y_entry.grid(row=r, column=3)
-
+        self._ui_x = CoordinateUI(self._root, self.update_point_frame, "Pos X", -1, 1, self.update_point, validate_numeral)
+        self._ui_x.frame.grid(row=r, column=0, columnspan=4)
         r += 1
-
-        pos_z_label = Label(self.update_point_frame, text="Pos Z")
-
-        self.sv_pos_z = StringVar()
-        self.pos_z_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_z, state=DISABLED)
-        self.sv_pos_z.trace_add(SV_WRITE, make_sv_callback_z(self.sv_pos_z, self.pos_z_entry, validate_numeral))
-
-        pos_z_label.grid(row=r, column=0)
-        self.pos_z_entry.grid(row=r, column=1)
-
+        self._ui_y = CoordinateUI(self._root, self.update_point_frame, "Pos Y", -1, 1, self.update_point, validate_numeral)
+        self._ui_y.frame.grid(row=r, column=0, columnspan=4)
         r += 1
-
-        pos_a_label = Label(self.update_point_frame, text="Angle")
-
-        self.sv_pos_a = StringVar()
-        self.pos_a_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_a, state=DISABLED)
-        self.sv_pos_a.trace_add(SV_WRITE, make_sv_callback_polar(self.sv_pos_a, self.pos_a_entry, validate_numeral))
-
-        pos_r_label = Label(self.update_point_frame, text="Radius")
-
-        self.sv_pos_r = StringVar()
-        self.pos_r_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_r, state=DISABLED)
-        self.sv_pos_r.trace_add(SV_WRITE, make_sv_callback_polar(self.sv_pos_r, self.pos_r_entry, validate_numeral))
-
-        pos_a_label.grid(row=r, column=0)
-        self.pos_a_entry.grid(row=r, column=1)
-        pos_r_label.grid(row=r, column=2)
-        self.pos_r_entry.grid(row=r, column=3)
+        self._ui_z = CoordinateUI(self._root, self.update_point_frame, "Pos Z", -1, 1, self.update_point_z, validate_numeral)
+        self._ui_z.frame.grid(row=r, column=0, columnspan=4)
+        r += 1
+        self._ui_a = CoordinateUI(self._root, self.update_point_frame, "Pos Angle", -1, 1, self.update_point_polar, validate_numeral)
+        self._ui_a.frame.grid(row=r, column=0, columnspan=4)
+        r += 1
+        self._ui_r = CoordinateUI(self._root, self.update_point_frame, "Pos Radius", -1, 1, self.update_point_polar, validate_numeral)
+        self._ui_r.frame.grid(row=r, column=0, columnspan=4)
 
         r += 1
 
@@ -419,6 +392,13 @@ class SpriteViewer:
             export_str += f'<Effects>{export_str_thrusters}\n</EffectS>\n'
         print(export_str)
 
+    def set_point_control_limits(self):
+        self._ui_x.update_min_max(self._sprite_cfg.w * -.5, self._sprite_cfg.w * .5)
+        self._ui_y.update_min_max(self._sprite_cfg.h * -.5, self._sprite_cfg.h * .5)
+        self._ui_z.update_min_max(self._sprite_cfg.h * -.5, self._sprite_cfg.h * .5)
+        self._ui_a.update_min_max(-179, 180)
+        self._ui_r.update_min_max(0, max(self._sprite_cfg.h, self._sprite_cfg.w))
+
     def reset_point_controls(self):
         self._point_controls_locked = True
         i = self._selected_idx
@@ -427,21 +407,16 @@ class SpriteViewer:
         self.point_type_device.configure(state = DISABLED)
         self.point_type_thruster.configure(state = DISABLED)
         self.point_type_dock.configure(state = DISABLED)
-        self.pos_x_entry.configure(fg=BLACK)
-        self.pos_x_entry.delete(0, END)
-        self.pos_x_entry.configure(state=DISABLED)
-        self.pos_y_entry.configure(fg=BLACK)
-        self.pos_y_entry.delete(0, END)
-        self.pos_y_entry.configure(state=DISABLED)
-        self.pos_z_entry.configure(fg=BLACK)
-        self.pos_z_entry.delete(0, END)
-        self.pos_z_entry.configure(state=DISABLED)
-        self.pos_a_entry.configure(fg=BLACK)
-        self.pos_a_entry.delete(0, END)
-        self.pos_a_entry.configure(state=DISABLED)
-        self.pos_r_entry.configure(fg=BLACK)
-        self.pos_r_entry.delete(0, END)
-        self.pos_r_entry.configure(state=DISABLED)
+        self._ui_x.disable()
+        self._ui_x.reset()
+        self._ui_y.disable()
+        self._ui_y.reset()
+        self._ui_z.disable()
+        self._ui_z.set(0)
+        self._ui_a.disable()
+        self._ui_a.set(0)
+        self._ui_r.disable()
+        self._ui_r.reset_min()
         self.pos_dir_entry.configure(fg=BLACK)
         self.pos_dir_entry.delete(0, END)
         self.pos_dir_entry.configure(state=DISABLED)
@@ -484,8 +459,8 @@ class SpriteViewer:
         polar = point.polar_coord
         a = d180(math.degrees(polar.a) + TRANSCENDENCE_ANGULAR_OFFSET)
         r = round(polar.r)
-        self.sv_pos_a.set(str(a))
-        self.sv_pos_r.set(str(r))
+        self._ui_a.set(a)
+        self._ui_r.set(r)
 
     def set_current_point_controls(self):
         self._point_controls_locked = True
@@ -508,7 +483,7 @@ class SpriteViewer:
         pt = point.point_type
 
         #print(i, type(point), pt, x, y, a, r, z)
-
+        self.set_point_control_limits()
         self.reset_point_controls()
 
         self.sv_point_type.set(pt)
@@ -516,16 +491,16 @@ class SpriteViewer:
         self.point_type_thruster.configure(state = NORMAL)
         self.point_type_dock.configure(state = NORMAL)
 
-        self.sv_pos_x.set(str(x))
-        self.pos_x_entry.configure(state = DISABLED if point.uses_polar_inputs else NORMAL)
-        self.sv_pos_y.set(str(y))
-        self.pos_y_entry.configure(state = DISABLED if point.uses_polar_inputs else NORMAL)
-        self.sv_pos_z.set(str(z))
-        self.pos_z_entry.configure(state = NORMAL if point.uses_z_input else DISABLED)
+        self._ui_x.set(x)
+        self._ui_x.set_state(DISABLED if point.uses_polar_inputs else NORMAL)
+        self._ui_y.set(y)
+        self._ui_y.set_state(DISABLED if point.uses_polar_inputs else NORMAL)
+        self._ui_z.set(z)
+        self._ui_z.set_state(NORMAL if point.uses_z_input else DISABLED)
 
         self.refresh_polar_point_info()
-        self.pos_a_entry.configure(state = NORMAL if point.uses_polar_inputs else DISABLED)
-        self.pos_r_entry.configure(state = NORMAL if point.uses_polar_inputs else DISABLED)
+        self._ui_a.set_state(NORMAL if point.uses_polar_inputs else DISABLED)
+        self._ui_r.set_state(NORMAL if point.uses_polar_inputs else DISABLED)
 
         if isinstance(point, PointDevice) or isinstance(point, PointThuster):
             direction = point.direction
@@ -597,9 +572,9 @@ class SpriteViewer:
         if i < 0:
             return
 
-        xs = self.pos_x_entry.get()
-        ys = self.pos_y_entry.get()
-        zs = self.pos_z_entry.get()
+        xs = self._ui_x.get_raw()
+        ys = self._ui_y.get_raw()
+        zs = self._ui_z.get_raw()
 
         #fail if any are not parsable
         failed = False
@@ -628,7 +603,7 @@ class SpriteViewer:
         elif x != point.sprite_coord.x or y != point.sprite_coord.y:
             z = point.scene_coord.z
             point.update_from_projection(SpriteCoord(x, y))
-            point.set_z(z)
+            point.set_z(round(z))
             updated = True
 
         if updated:
@@ -672,9 +647,9 @@ class SpriteViewer:
         if i < 0:
             return
 
-        as_ = self.pos_a_entry.get()
-        rs = self.pos_r_entry.get()
-        zs = self.pos_z_entry.get()
+        as_ = self._ui_a.get_raw()
+        rs = self._ui_r.get_raw()
+        zs = self._ui_z.get_raw()
 
         #fail if any are not parsable
         failed = False
