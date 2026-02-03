@@ -3,14 +3,13 @@ from tkinter import LEFT, RIGHT, TOP, BOTTOM, X, Y, VERTICAL, HORIZONTAL, BOTH, 
 from tkinter import filedialog
 
 
-class SpriteOpener:
-    def __init__(self, root: Tk, default_name: str=""):
+class XMLSaver:
+    def __init__(self, root: Tk):
         self._root = root
-        self._default_name = default_name
         self._path: str|None = None
 
-    def load_image(self):
-        new_path = filedialog.askopenfilename(filetypes=[("Image Files", ".png .jpg .jpeg .bmp")])
+    def save_path(self):
+        new_path = filedialog.asksaveasfilename(filetypes=[("XML Files", ".xml"), ("Text Files", ".txt")], defaultextension=".xml", confirmoverwrite=True)
         if new_path:
             self._path = new_path
         return new_path

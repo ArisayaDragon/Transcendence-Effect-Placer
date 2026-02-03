@@ -19,6 +19,7 @@ from transcendence_effect_placer.data.math import a_d, d180, d360
 from transcendence_effect_placer.ui.load_file import SpriteOpener
 from transcendence_effect_placer.ui.sprite_settings import SpriteSettingsDialogue
 from transcendence_effect_placer.ui.elements.slider_entry import SliderEntryUI
+from transcendence_effect_placer.ui.save_file import XMLSaver
 
 #set PIL max pixels
 Image.MAX_IMAGE_PIXELS = 2 ** 34 #this is 2**36, which is 64GB - should be plenty big for current transcendence ships
@@ -67,6 +68,7 @@ class SpriteViewer:
         self._main_menu: MainMenuBar = MainMenuBar(root, self)
         self._selected_idx: int = -1
         self._point_controls_locked: bool = False
+        self._xml_saver = XMLSaver(root)
         self._init_wnd()
         self.load_image()
 
@@ -265,6 +267,11 @@ class SpriteViewer:
         if export_str_thrusters:
             export_str += f'<Effects>{export_str_thrusters}\n</EffectS>\n'
         print(export_str)
+        path = self._xml_saver.save_path()
+        if path:
+            print(f'exporting XML to: {path}')
+            with open(path, 'w') as f:
+                f.write(export_str)
 
     def set_point_control_limits(self):
         self._ui_x.update_min_max(self._sprite_cfg.w * -.5, self._sprite_cfg.w * .5)
