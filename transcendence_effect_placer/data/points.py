@@ -27,8 +27,7 @@ Coordinate systems:
 PIL: 0,0 is upper left, +x is right, +y is down <-- this is what PIL requires for drawing
 Sprite: 0,0 is center of sprite, +x is right, +y is up <-- this is what the user interacts with
 XMLPolar: *,0 is the center of the sprite, a=0 is forwards, and a+ moves counter clockwise
-GeorgeScene: 0,0,0 is center of the sprite, +x is backwards (180 degrees from the bow), +y is PROBABLY to the port side (90 degrees from the bow), +z is above
-GeorgeZ: the z position is weird and exists sort of outside most of these except the scene?
+GeorgeScene: 0,0,0 is center of the sprite, x is ?, +y is backwards (180 degrees from the bow), +z is above
 '''
 
 class DefaultSpriteConfig(SpriteConfig):
@@ -348,8 +347,9 @@ class PointThuster(Point):
     
     def _render_arc(self, image: ImageDraw, direction: int = 0, mirror: MirrorOptions = MIRROR_NULL):
         pos = self.get_projection_coord_at_direction(direction, mirror)
-        pil_thrust_angle = (self.direction + direction + 90) % 360
+        pil_thrust_angle = (180 - self.direction) % 360
         pil_thrust_angle = round(self._mirror_angle_degrees(pil_thrust_angle, mirror))
+        pil_thrust_angle = (pil_thrust_angle + direction + (-90 if mirror.x else 90)) % 360
         c=3
         image.arc((pos.x-c, pos.y-c, pos.x+c, pos.y+c), pil_thrust_angle-1, pil_thrust_angle+1, fill=self.color)
         c+=1
@@ -412,25 +412,51 @@ class PointDevice(Point):
         '''
         direction = (self.direction + dir) % 360
         #if we have an arc, that overrides start and end
+        #we swap end and start from transcendence's version to PIL's version
         if (self.arc >= 0):
-            start = round(direction - self.arc / 2) % 360
-            end = round(direction + self.arc / 2) % 360
+            end = round(direction - self.arc / 2) % 360
+            start = round(direction + self.arc / 2) % 360
         elif (self.arc_start >= 0 and self.arc_end >= 0):
-            start = (self.arc_start + dir) % 360
-            end = (self.arc_end + dir) % 360
+            end = (self.arc_start + dir) % 360
+            start = (self.arc_end + dir) % 360
         else:
             start = -1
             end = -1
+        #need to flip these around around the y axis for transcendence
+        direction = (180 - direction)%360
+        if start >= 0 or end >= 0:
+            start = (180 - start)%360
+            end = (180 - end)%360
         return (direction, start, end)
     
     def _render_arc(self, image: ImageDraw, direction: int, mirror: MirrorOptions = MIRROR_NULL):
         pos = self.get_projection_coord_at_direction(direction, mirror)
-        aim_dir, start, end = self.get_arc_at_dir(direction)
+        aim_dir, start, end = self.get_arc_at_dir(0)
         aim_dir = round(self._mirror_angle_degrees(aim_dir, mirror))
+        aim_dir = (aim_dir + direction + (-90 if mirror.x else 90)) % 360
         start = round(self._mirror_angle_degrees(start, mirror))
+        start = (start + direction + (-90 if mirror.x else 90)) % 360
         end = round(self._mirror_angle_degrees(end, mirror))
-        image.arc((pos.x-5, pos.y-5, pos.x+5, pos.y+5), (90+start) % 360, (90+end) % 360, fill=self.color_arc)
-        image.arc((pos.x-7, pos.y-7, pos.x+7, pos.y+7), (90+aim_dir) % 360, (90+aim_dir) % 360, fill=self.color)
+        end = (end + direction + (-90 if mirror.x else 90)) % 360
+        if mirror.x or mirror.y:
+            end_ = end
+            end = start
+            start = end_
+            if mirror.y:
+                start += 180
+                end += 180
+                aim_dir += 180
+                if mirror.x and mirror.y:
+                    end_ = end
+                    end = start
+                    start = end_
+        image.arc((pos.x-5, pos.y-5, pos.x+5, pos.y+5), (start) % 360, (end) % 360, fill=self.color_arc)
+        c=6
+        image.arc((pos.x-c, pos.y-c, pos.x+c, pos.y+c), (aim_dir-2) % 360, (aim_dir+2) % 360, fill=self.color)
+        c+=1
+        image.arc((pos.x-c, pos.y-c, pos.x+c, pos.y+c), (aim_dir-2) % 360, (aim_dir+2) % 360, fill=self.color)
+        c+=1
+        image.arc((pos.x-c, pos.y-c, pos.x+c, pos.y+c), (aim_dir-2) % 360, (aim_dir+2) % 360, fill=self.color)
 
     def get_arc_xml(self):
         return ""
