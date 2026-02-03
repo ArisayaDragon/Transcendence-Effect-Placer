@@ -5,7 +5,7 @@ from PIL.ImageDraw import ImageDraw
 from dataclasses import dataclass
 
 from transcendence_effect_placer.data.data import SpriteConfig, CCoord, ICoord, PCoord
-from transcendence_effect_placer.data.math import convert_polar_to_projection, convert_projection_to_polar
+from transcendence_effect_placer.data.math import convert_polar_to_projection, convert_projection_to_polar, a_d, d180, d360
 
 @dataclass
 class MirrorOptions:
@@ -167,9 +167,10 @@ class Point(ABC):
         self.sprite_coord.y = y
         self.update_from_projection(self.sprite_coord)
 
-    def _mirror_angle_degrees(self, degrees: float, mirror: MirrorOptions) -> float:
+    def _mirror_angle_degrees(self, degrees: float, mirror: MirrorOptions, screenspace: bool = True) -> float:
         #convert to transcendence ship angle, which is -90 degrees offset
-        degrees -= 90
+        if screenspace:
+            degrees -= 90
         degrees %= 360
         if degrees > 180:
             degrees -= 360
@@ -182,7 +183,8 @@ class Point(ABC):
                 degrees += 180
             degrees *= -1
         #convert back to screenspace angle
-        degrees += 90
+        if screenspace:
+            degrees += 90
         degrees %= 360
         return degrees
 
@@ -269,7 +271,7 @@ class PointThuster(Point):
     color = (255,255,0,255)
     mirror_support = MirrorOptions(1,0,1)
 
-    def __init__(self, coord: PILCoord|SpriteCoord|None = None, label: str|None = None, sprite_cfg: SpriteConfig = DEFAULT_CFG, rot_frame: int = 0, direction: int = 0, clone_point: Point|None = None):
+    def __init__(self, coord: PILCoord|SpriteCoord|None = None, label: str|None = None, sprite_cfg: SpriteConfig = DEFAULT_CFG, rot_frame: int = 0, direction: int = 180, clone_point: Point|None = None):
         '''
         Docstring for __init__
         
@@ -339,11 +341,23 @@ class PointThuster(Point):
             return f'\tbringToFront="{range_str}"'
 
     def to_xml(self):
-        ret = f'<Effect type="thrustMain"\t\tposAngle="{self.polar_coord.dir_i360()}"\tposRadius="{round(self.polar_coord.r)}"\tposZ="{round(self.polar_coord.z)}"\trotation="{self.direction}"\teffect="&efMainThrusterLarge;"{self.get_send_to_back()}{self.get_bring_to_front()}/>'
-        if self.mirror.x:
-            ret += f'<Effect type="thrustMain"\t\tposAngle="-{self.polar_coord.dir_i360()}"\tposRadius="{round(self.polar_coord.r)}"\tposZ="{round(self.polar_coord.z)}"\trotation=-{self.direction}"\teffect="&efMainThrusterLarge;"{self.get_send_to_back()}{self.get_bring_to_front()}/>'
-        #thrusters dont need y-mirroring
-        return ret
+        mirrors = self._get_mirror_options()
+        ret = ""
+        for mirror in mirrors:
+            ret += self._fmt_xml(mirror)
+        return ret.strip()
+    
+    def _fmt_xml(self, mirror: MirrorOptions = MIRROR_NULL):
+        z = round(self.polar_coord.z)
+        a = a_d(self.polar_coord.a)
+        r = round(self.polar_coord.r)
+        direction = self.direction
+        a = round(d180(self._mirror_angle_degrees(a, mirror) + 90))
+        direction = round(d180(self._mirror_angle_degrees(direction, mirror, False)))
+        if mirror.z:
+            z *= -1
+        xml = f'<Effect type="thrustMain"\t\tposAngle="{a}"\tposRadius="{r}"\tposZ="{z}"\trotation="{direction}"\teffect="&efMainThrusterLarge;"{self.get_send_to_back()}{self.get_bring_to_front()}/>\n'
+        return xml
     
     def _render_arc(self, image: ImageDraw, direction: int = 0, mirror: MirrorOptions = MIRROR_NULL):
         pos = self.get_projection_coord_at_direction(direction, mirror)
@@ -414,6 +428,30 @@ class PointDevice(Point):
         #if we have an arc, that overrides start and end
         #we swap end and start from transcendence's version to PIL's version
         if (self.arc >= 0):
+            start = round(direction - self.arc / 2) % 360
+            end = round(direction + self.arc / 2) % 360
+        elif (self.arc_start >= 0 and self.arc_end >= 0):
+            start = (self.arc_start + dir) % 360
+            end = (self.arc_end + dir) % 360
+        else:
+            start = -1
+            end = -1
+        return (direction, start, end)
+
+    def get_pil_arc_at_dir(self, dir: int) -> tuple[int, int, int]:
+        '''
+        Docstring for get_arc_at_dir
+        
+        :param self: Description
+        :param dir: Description
+        :type dir: int
+        :return: default fire direction, arc start angle, arc end angle
+        :rtype: tuple[int, int, int]
+        '''
+        direction = (self.direction + dir) % 360
+        #if we have an arc, that overrides start and end
+        #we swap end and start from transcendence's version to PIL's version
+        if (self.arc >= 0):
             end = round(direction - self.arc / 2) % 360
             start = round(direction + self.arc / 2) % 360
         elif (self.arc_start >= 0 and self.arc_end >= 0):
@@ -422,7 +460,7 @@ class PointDevice(Point):
         else:
             start = -1
             end = -1
-        #need to flip these around around the y axis for transcendence
+        #need to flip these around around the y axis for transcendence->PIL
         direction = (180 - direction)%360
         if start >= 0 or end >= 0:
             start = (180 - start)%360
@@ -431,7 +469,7 @@ class PointDevice(Point):
     
     def _render_arc(self, image: ImageDraw, direction: int, mirror: MirrorOptions = MIRROR_NULL):
         pos = self.get_projection_coord_at_direction(direction, mirror)
-        aim_dir, start, end = self.get_arc_at_dir(0)
+        aim_dir, start, end = self.get_pil_arc_at_dir(0)
         aim_dir = round(self._mirror_angle_degrees(aim_dir, mirror))
         aim_dir = (aim_dir + direction + (-90 if mirror.x else 90)) % 360
         start = round(self._mirror_angle_degrees(start, mirror))
@@ -458,15 +496,40 @@ class PointDevice(Point):
         c+=1
         image.arc((pos.x-c, pos.y-c, pos.x+c, pos.y+c), (aim_dir-2) % 360, (aim_dir+2) % 360, fill=self.color)
 
-    def get_arc_xml(self):
-        return ""
-
     def to_xml(self):
-        ret = f'<DeviceSlot id="{self.label}"\t\tposAngle="{self.polar_coord.dir_i360()}"\tposRadius="{round(self.polar_coord.r)}"\tposZ="{round(self.polar_coord.z)}"\tfireAngle="{self.direction}"\t{self.get_arc_xml()}/>'
-        if self.mirror.x:
-            ret += f'<DeviceSlot id="{self.label}"\t\tposAngle="-{self.polar_coord.dir_i360()}"\tposRadius="{round(self.polar_coord.r)}"\tposZ="{round(self.polar_coord.z)}"\tfireAngle=-{self.direction}"\t{self.get_arc_xml()}/>'
-        #thrusters dont need y-mirroring
+        mirrors = self._get_mirror_options()
+        ret = ""
+        for mirror in mirrors:
+            ret += self._fmt_xml(mirror)
         return ret
+    
+    def _fmt_xml(self, mirror: MirrorOptions = MIRROR_NULL):
+        z = round(self.polar_coord.z)
+        a = a_d(self.polar_coord.a)
+        r = round(self.polar_coord.r)
+        direction = self.direction
+        a = round(d180(self._mirror_angle_degrees(a, mirror) + 90))
+        direction = round(d180(self._mirror_angle_degrees(direction, mirror, False)))
+        if mirror.z:
+            z *= -1
+        mx = "_x" if mirror.x else ""
+        my = "_y" if mirror.y else ""
+        mz = "_z" if mirror.z else ""
+        return f'<DeviceSlot id="{self.label}{mx}{my}{mz}"\t\tposAngle="{a}"\tposRadius="{r}"\tposZ="{z}"\tfireAngle="{direction}"\t{self._fmt_xml_arc(mirror)}/>\n'
+
+    def _fmt_xml_arc(self, mirror: MirrorOptions = MIRROR_NULL):
+        if self.arc > 0:
+            a = round(d360(self.arc))
+            return f'fireArc="{a}"'
+        elif self.arc_start > -1 and self.arc_end > -1:
+            s = round(d180(self._mirror_angle_degrees(self.arc_start, mirror, False)))
+            e = round(d180(self._mirror_angle_degrees(self.arc_end, mirror, False)))
+            if mirror.y:
+                s_ = s
+                s = e
+                e = s_
+            return f'minFireArc="{s}"\tmaxFireArc="{e}"'
+        return ""
     
     def render_to_image(self, image, rotation_dir):
         mirrors = self._get_mirror_options()
