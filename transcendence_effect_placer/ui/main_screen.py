@@ -50,7 +50,63 @@ class MainMenuBar:
 
         self._root.config(menu=menubar)
         
+class CoordinateUI:
+    def __init__(self, root: Tk, frame: Frame, label:str, min: float|int, max: float|int, cb: Callable[[Event|None], None], validation_cb: Callable[[str], bool] = validate_numeral):
+        self._root = root
+        self.parent = frame
+        self._cb = cb
+        self._validation = validation_cb
+        self._min = min
+        self._max = max
+        self.value: str = str(min)
+        self._frame = Frame(self.parent)
+        pos_x_label = Label(self._frame, text=label)
+        pos_x_label.pack(side=LEFT)
+        if max < min: max = min
+        self._slider = Scale(self._frame, from_=min, to=max, orient=tk.HORIZONTAL, length=200, command=self._slider_cb)
+        self._slider.pack(side=LEFT)
+        self._var = StringVar()
+        self._entry = Entry(self._frame, textvariable=self._var, state=DISABLED)
+        self._var.trace_add(SV_WRITE, self._trace_cb)
+        self._entry.pack(side=LEFT)
 
+    def set_state(self, state: str):
+        self._entry.configure(state= state)
+        self._slider.configure(state= state)
+
+    def disable(self):
+        self.set_state(DISABLED)
+    def enable(self):
+        self.set_state(NORMAL)
+
+    def update_min_max(self, min: float|int, max: float|int):
+        self._min = min
+        self._max = max
+        self._slider.configure(min=min, max=max)
+
+    def _trace_cb(self, var_name, index, mode):
+        s = self._var.get()
+        valid = self._validation(s)
+        if valid:
+            v = float(s)
+            #we dont update var to this value because it can mess up someone typing in something
+            if v > self._max:
+                s = str(self._max)
+            elif v < self._min:
+                s = str(self._min)
+            self._entry.configure(fg=BLACK) 
+            self._slider.set(int(s))
+            self.value = s
+            self._cb() #must do a general validation check on all inputs, in event a bad input was left elsewhere
+        elif not valid:
+            self._entry.configure(fg=RED)
+    def _slider_cb(self):
+        v = self._slider.get()
+        s = str(v)
+        self._var.set(s)
+        self.value = s
+        self._entry.configure(fg=BLACK) 
+        self._cb()
 
 class SpriteViewer:
     def __init__(self, root: Tk):
@@ -96,10 +152,12 @@ class SpriteViewer:
         self._anim_slider = Scale(slider_frame, from_=0, to=self._sprite_cfg.anim_frames, orient=tk.HORIZONTAL, length=200, command=self.display_sprite)
         self._anim_slider.set(0)
         self._anim_slider.pack(side=LEFT)
+        self._anim_slider.configure(state=DISABLED)
 
         self._rot_slider = Scale(slider_frame, from_=0, to=self._sprite_cfg.rot_frames - 1, orient=tk.HORIZONTAL, length=200, command=self.display_sprite)
         self._rot_slider.set(0)
         self._rot_slider.pack(side=RIGHT)
+        self._rot_slider.configure(state=DISABLED)
         pos_x_label = Label(slider_frame, text="Rotation Frame")
         pos_x_label.pack(side=RIGHT)
 
@@ -816,10 +874,12 @@ class SpriteViewer:
         #reset sliders
         if self._anim_slider:
             self._anim_slider.set(0)
-            self._anim_slider.configure(from_=0, to=self._sprite_cfg.anim_frames)
+            num_anim_frames = self._sprite_cfg.anim_frames
+            self._anim_slider.configure(from_=0, to=num_anim_frames, state=NORMAL if num_anim_frames else DISABLED)
         if self._rot_slider:
             self._rot_slider.set(0)
-            self._rot_slider.configure(from_=0, to=self._sprite_cfg.rot_frames - 1)
+            num_rot_frames = self._sprite_cfg.rot_frames - 1
+            self._rot_slider.configure(from_=0, to=num_rot_frames, state=NORMAL if num_rot_frames else DISABLED)
 
         #reset point editing
         self.reset_point_controls()
