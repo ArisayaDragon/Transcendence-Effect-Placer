@@ -1,0 +1,1 @@
+pyinstaller -F transcendence_effect_placer.py
