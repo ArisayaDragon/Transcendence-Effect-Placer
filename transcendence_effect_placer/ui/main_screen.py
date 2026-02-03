@@ -163,42 +163,17 @@ class SpriteViewer:
         self.mirror_z_check.grid(row=r, column=2)
 
         r += 1
-
-        pos_dir_label = Label(self.update_point_frame, text="Direction")
-
-        self.sv_pos_dir = StringVar()
-        self.pos_dir_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_dir, state=DISABLED)
-        self.sv_pos_dir.trace_add(SV_WRITE, make_sv_callback_arc(self.sv_pos_dir, self.pos_dir_entry, validate_numeral))
-
-        pos_arc_label = Label(self.update_point_frame, text="Arc")
-
-        self.sv_pos_arc = StringVar()
-        self.pos_arc_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_arc, state=DISABLED)
-        self.sv_pos_arc.trace_add(SV_WRITE, make_sv_callback_arc(self.sv_pos_arc, self.pos_arc_entry, validate_numeral))
-
-        pos_dir_label.grid(row=r, column=0)
-        self.pos_dir_entry.grid(row=r, column=1)
-        pos_arc_label.grid(row=r, column=2)
-        self.pos_arc_entry.grid(row=r, column=3)
-
+        self._ui_dir = SliderEntryUI(self._root, self.update_point_frame, "Direction", -179, 180, self.update_point_arcs, validate_numeral)
+        self._ui_dir.frame.grid(row=r, column=0, columnspan=4)
         r += 1
-
-        pos_arc_st_label = Label(self.update_point_frame, text="Arc Start")
-
-        self.sv_pos_arc_st = StringVar()
-        self.pos_arc_st_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_arc_st, state=DISABLED)
-        self.sv_pos_arc_st.trace_add(SV_WRITE, make_sv_callback_arc(self.sv_pos_arc_st, self.pos_arc_st_entry, validate_numeral))
-
-        pos_arc_en_label = Label(self.update_point_frame, text="Arc End")
-
-        self.sv_pos_arc_en = StringVar()
-        self.pos_arc_en_entry = Entry(self.update_point_frame, textvariable=self.sv_pos_arc_en, state=DISABLED)
-        self.sv_pos_arc_en.trace_add(SV_WRITE, make_sv_callback_arc(self.sv_pos_arc_en, self.pos_arc_en_entry, validate_numeral))
-
-        pos_arc_st_label.grid(row=r, column=0)
-        self.pos_arc_st_entry.grid(row=r, column=1)
-        pos_arc_en_label.grid(row=r, column=2)
-        self.pos_arc_en_entry.grid(row=r, column=3)
+        self._ui_arc = SliderEntryUI(self._root, self.update_point_frame, "Arc", -1, 356, self.update_point_arcs, validate_numeral)
+        self._ui_arc.frame.grid(row=r, column=0, columnspan=4)
+        r += 1
+        self._ui_arc_s = SliderEntryUI(self._root, self.update_point_frame, "Arc Start", -1, 359, self.update_point_arcs, validate_numeral)
+        self._ui_arc_s.frame.grid(row=r, column=0, columnspan=4)
+        r += 1
+        self._ui_arc_e = SliderEntryUI(self._root, self.update_point_frame, "Arc End", -1, 359, self.update_point_arcs, validate_numeral)
+        self._ui_arc_e.frame.grid(row=r, column=0, columnspan=4)
 
         r += 1
 
@@ -316,18 +291,14 @@ class SpriteViewer:
         self._ui_a.set(0)
         self._ui_r.disable()
         self._ui_r.reset_min()
-        self.pos_dir_entry.configure(fg=BLACK)
-        self.pos_dir_entry.delete(0, END)
-        self.pos_dir_entry.configure(state=DISABLED)
-        self.pos_arc_entry.configure(fg=BLACK)
-        self.pos_arc_entry.delete(0, END)
-        self.pos_arc_entry.configure(state=DISABLED)
-        self.pos_arc_st_entry.configure(fg=BLACK)
-        self.pos_arc_st_entry.delete(0, END)
-        self.pos_arc_st_entry.configure(state=DISABLED)
-        self.pos_arc_en_entry.configure(fg=BLACK)
-        self.pos_arc_en_entry.delete(0, END)
-        self.pos_arc_en_entry.configure(state=DISABLED)
+        self._ui_dir.set(0)
+        self._ui_dir.disable()
+        self._ui_arc.set(0)
+        self._ui_arc.disable()
+        self._ui_arc_s.set(0)
+        self._ui_arc_s.disable()
+        self._ui_arc_e.set(0)
+        self._ui_arc_e.disable()
         self.mirror_x_check.deselect()
         self.mirror_x_check.configure(state=DISABLED)
         self.mirror_y_check.deselect()
@@ -404,29 +375,29 @@ class SpriteViewer:
 
         if isinstance(point, PointDevice) or isinstance(point, PointThuster):
             direction = point.direction
-            self.sv_pos_dir.set(str(direction))
-            self.pos_dir_entry.configure(state = NORMAL)
+            self._ui_dir.set(direction)
+            self._ui_dir.enable()
         else:
-            self.sv_pos_dir.set("")
-            self.pos_dir_entry.configure(state = DISABLED)
+            self._ui_dir.set(0)
+            self._ui_dir.disable()
 
         if isinstance(point, PointDevice):
             arc = point.arc
             arc_st = point.arc_start
             arc_en = point.arc_end
-            self.sv_pos_arc.set(str(arc))
-            self.pos_arc_entry.configure(state = NORMAL)
-            self.sv_pos_arc_st.set(str(arc_st))
-            self.pos_arc_st_entry.configure(state = NORMAL)
-            self.sv_pos_arc_en.set(str(arc_en))
-            self.pos_arc_en_entry.configure(state = NORMAL)
+            self._ui_arc.set(arc)
+            self._ui_arc.enable()
+            self._ui_arc_s.set(arc_st)
+            self._ui_arc_s.enable()
+            self._ui_arc_e.set(arc_en)
+            self._ui_arc_e.enable()
         else:
-            self.sv_pos_arc.set("")
-            self.sv_pos_arc_en.set("")
-            self.sv_pos_arc_st.set("")
-            self.pos_arc_entry.configure(state = DISABLED)
-            self.pos_arc_st_entry.configure(state = DISABLED)
-            self.pos_arc_en_entry.configure(state = DISABLED)
+            self._ui_arc.set(-1)
+            self._ui_arc_s.set(-1)
+            self._ui_arc_e.set(-1)
+            self._ui_arc.disable()
+            self._ui_arc_s.disable()
+            self._ui_arc_e.disable()
 
         #print(point.mirror.x, point.mirror.y, point.mirror.z)
         if point.mirror.x:
@@ -609,7 +580,7 @@ class SpriteViewer:
 
         if isinstance(point, PointThuster) or isinstance(point, PointDevice):
             #handle direction
-            point.direction = int(self.sv_pos_dir.get())
+            point.direction = int(self._ui_dir.get())
         if isinstance(point, PointDevice):
             #handle arcs
             use_range = False
@@ -617,11 +588,11 @@ class SpriteViewer:
             old_arc = point.arc
             old_start = point.arc_start
             old_end = point.arc_end
-            new_arc_s = self.sv_pos_arc.get()
+            new_arc_s = self._ui_arc.get_raw()
             new_arc = int(new_arc_s if new_arc_s else -2)
-            new_start_s = self.sv_pos_arc_st.get()
+            new_start_s = self._ui_arc_s.get_raw()
             new_start = int(new_start_s if new_start_s else -2)
-            new_end_s = self.sv_pos_arc_en.get()
+            new_end_s = self._ui_arc_e.get_raw()
             new_end = int(new_end_s if new_end_s else -2)
 
             if old_arc != new_arc:
