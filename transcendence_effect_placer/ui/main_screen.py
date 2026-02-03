@@ -10,6 +10,7 @@ import math
 import numpy as np
 from time import sleep
 from typing import Callable, Literal
+from copy import deepcopy
 
 from transcendence_effect_placer.common.validation import validate_numeral, validate_numeral_non_negative, validate_null
 from transcendence_effect_placer.data.data import SpriteConfig, CCoord, ICoord, PCoord
@@ -17,6 +18,7 @@ from transcendence_effect_placer.data.points import Point, PointGeneric, PointDe
 from transcendence_effect_placer.data.math import a_d, d180, d360
 from transcendence_effect_placer.ui.load_file import SpriteOpener
 from transcendence_effect_placer.ui.sprite_settings import SpriteSettingsDialogue
+from transcendence_effect_placer.ui.elements.slider_entry import SliderEntryUI
 
 #set PIL max pixels
 Image.MAX_IMAGE_PIXELS = 2 ** 34 #this is 2**36, which is 64GB - should be plenty big for current transcendence ships
@@ -50,103 +52,6 @@ class MainMenuBar:
 
         self._root.config(menu=menubar)
         
-class CoordinateUI:
-    def __init__(self, root: Tk, frame: Frame, label:str, min: float|int, max: float|int, cb: Callable[[Event|None], None], validation_cb: Callable[[str], bool] = validate_numeral):
-        self._root = root
-        self.parent = frame
-        self._cb = cb
-        self._validation = validation_cb
-        self._min = min
-        self._max = max
-        self.value: str = str(min)
-        self.frame = Frame(self.parent)
-        pos_x_label = Label(self.frame, text=label)
-        pos_x_label.pack(side=LEFT)
-        if max < min: max = min
-        self._slider = Scale(self.frame, from_=min, to=max, orient=tk.HORIZONTAL, length=200, command=self._slider_cb)
-        self._slider.pack(side=LEFT)
-        self._var = StringVar()
-        self._entry = Entry(self.frame, textvariable=self._var, state=DISABLED)
-        self._var.trace_add(SV_WRITE, self._trace_cb)
-        self._entry.pack(side=LEFT)
-        self._state: Literal['disabled', 'normal'] = DISABLED
-        self.set_state(DISABLED)
-
-    def set_state(self, state: Literal['disabled', 'normal']):
-        self._entry.configure(state= state)
-        self._slider.configure(state= state)
-        self._state = state
-
-    def set(self, v: int|float):
-        v = max(self._min, min(self._max, v))
-        self._slider.set(v)
-        self._var.set(str(v))
-        self._entry.configure(fg=BLACK)
-
-    def get(self):
-        return float(self.value)
-    
-    def get_raw(self):
-        return self._var.get()
-
-    def disable(self):
-        self.set_state(DISABLED)
-    def enable(self):
-        self.set_state(NORMAL)
-
-    def update_min_max(self, min_: float|int, max_: float|int):
-        self._min = min_
-        self._max = max_
-        self._slider.configure(from_=min_, to=max_)
-        s = self._var.get()
-        valid = self._validation(s)
-        if valid:
-            v = float(s)
-            v = max(min_, min(max_, v))
-            self._slider.set(v)
-            self._var.set(str(v))
-            self._entry.configure(fg=BLACK)
-        else:
-            v = min_
-            self._slider.set(v)
-            self._var.set(str(v))
-            self._entry.configure(fg=BLACK)
-
-    def reset(self):
-        self.set((self._max + self._min) / 2)
-
-    def reset_min(self):
-        self.set(self._min)
-
-    def reset_max(self):
-        self.set(self._max)
-
-    def _trace_cb(self, var_name, index, mode):
-        if self._state == DISABLED: return
-        s = self._var.get()
-        valid = self._validation(s)
-        if valid:
-            v = float(s)
-            #we dont update var to this value because it can mess up someone typing in something
-            if v > self._max:
-                s = str(self._max)
-            elif v < self._min:
-                s = str(self._min)
-            self._entry.configure(fg=BLACK) 
-            self._slider.set(int(s))
-            self.value = s
-            self._cb(None) #must do a general validation check on all inputs, in event a bad input was left elsewhere
-        elif not valid:
-            self._entry.configure(fg=RED)
-    def _slider_cb(self, _:str):
-        if self._state == DISABLED: return
-        v = self._slider.get()
-        s = str(v)
-        self._var.set(s)
-        self.value = s
-        self._entry.configure(fg=BLACK) 
-        self._cb(None)
-
 class SpriteViewer:
     def __init__(self, root: Tk):
         self._root = root
@@ -158,8 +63,6 @@ class SpriteViewer:
         self._points: list[Point] = []
         self._wnd_image_loader = SpriteOpener(root)
         self._wnd_sprite_settings = SpriteSettingsDialogue(root)
-        self._anim_slider: Scale|None = None
-        self._rot_slider: Scale|None = None
         self._mode: SpriteMode = _MODE_SHIP
         self._main_menu: MainMenuBar = MainMenuBar(root, self)
         self._selected_idx: int = -1
@@ -186,19 +89,12 @@ class SpriteViewer:
         slider_frame = Frame(self.display_frame)
         slider_frame.pack(fill=X)
 
-        pos_x_label = Label(slider_frame, text="Anim Frame")
-        pos_x_label.pack(side=LEFT)
-        self._anim_slider = Scale(slider_frame, from_=0, to=self._sprite_cfg.anim_frames, orient=tk.HORIZONTAL, length=200, command=self.display_sprite)
-        self._anim_slider.set(0)
-        self._anim_slider.pack(side=LEFT)
-        self._anim_slider.configure(state=DISABLED)
-
-        self._rot_slider = Scale(slider_frame, from_=0, to=self._sprite_cfg.rot_frames - 1, orient=tk.HORIZONTAL, length=200, command=self.display_sprite)
-        self._rot_slider.set(0)
-        self._rot_slider.pack(side=RIGHT)
-        self._rot_slider.configure(state=DISABLED)
-        pos_x_label = Label(slider_frame, text="Rotation Frame")
-        pos_x_label.pack(side=RIGHT)
+        r = 0
+        self._ui_anim = SliderEntryUI(self._root, slider_frame, "Anim Frame", 0, 0, self.display_sprite, validate_numeral_non_negative)
+        self._ui_anim.frame.grid(row=r, column=0, columnspan=4)
+        r += 1
+        self._ui_rot = SliderEntryUI(self._root, slider_frame, "Rotation Frame", 0, 0, self.display_sprite, validate_numeral_non_negative)
+        self._ui_rot.frame.grid(row=r, column=0, columnspan=4)
 
         self._image_display.bind("<Button-1>", self.add_point)
 
@@ -237,19 +133,19 @@ class SpriteViewer:
         self.point_type_dock.grid(row=r, column=3)
 
         r += 1
-        self._ui_x = CoordinateUI(self._root, self.update_point_frame, "Pos X", -1, 1, self.update_point, validate_numeral)
+        self._ui_x = SliderEntryUI(self._root, self.update_point_frame, "Pos X", -1, 1, self.update_point, validate_numeral)
         self._ui_x.frame.grid(row=r, column=0, columnspan=4)
         r += 1
-        self._ui_y = CoordinateUI(self._root, self.update_point_frame, "Pos Y", -1, 1, self.update_point, validate_numeral)
+        self._ui_y = SliderEntryUI(self._root, self.update_point_frame, "Pos Y", -1, 1, self.update_point, validate_numeral)
         self._ui_y.frame.grid(row=r, column=0, columnspan=4)
         r += 1
-        self._ui_z = CoordinateUI(self._root, self.update_point_frame, "Pos Z", -1, 1, self.update_point_z, validate_numeral)
+        self._ui_z = SliderEntryUI(self._root, self.update_point_frame, "Pos Z", -1, 1, self.update_point_z, validate_numeral)
         self._ui_z.frame.grid(row=r, column=0, columnspan=4)
         r += 1
-        self._ui_a = CoordinateUI(self._root, self.update_point_frame, "Pos Angle", -1, 1, self.update_point_polar, validate_numeral)
+        self._ui_a = SliderEntryUI(self._root, self.update_point_frame, "Pos Angle", -179, 180, self.update_point_polar, validate_numeral)
         self._ui_a.frame.grid(row=r, column=0, columnspan=4)
         r += 1
-        self._ui_r = CoordinateUI(self._root, self.update_point_frame, "Pos Radius", -1, 1, self.update_point_polar, validate_numeral)
+        self._ui_r = SliderEntryUI(self._root, self.update_point_frame, "Pos Radius", 0, 1, self.update_point_polar, validate_numeral_non_negative)
         self._ui_r.frame.grid(row=r, column=0, columnspan=4)
 
         r += 1
@@ -307,7 +203,10 @@ class SpriteViewer:
         r += 1
 
         self.delete_button = Button(self.update_point_frame, text="Delete Point", command=self.delete_point, state=DISABLED)
-        self.delete_button.grid(row=r, column=1, columnspan=2)
+        self.delete_button.grid(row=r, column=0)
+
+        self.clone_button = Button(self.update_point_frame, text="Clone Point", command=self.clone_point, state=DISABLED)
+        self.clone_button.grid(row=r, column=3)
 
     def load_sprite_cfg(self):
         self._wnd_sprite_settings.open_dialogue(self._sprite_cfg)
@@ -349,8 +248,8 @@ class SpriteViewer:
         if self._image is None:
             return
         
-        anim_frame = 0 if self._anim_slider is None else int(self._anim_slider.get())
-        rot_frame = 0 if self._rot_slider is None else int(self._rot_slider.get())
+        anim_frame = self._ui_anim.get()
+        rot_frame = self._ui_rot.get()
         #print(f'anim: {anim_frame}\trot: {rot_frame}')
 
         ul = self._sprite_cfg.frame(rot_frame, anim_frame)
@@ -436,14 +335,15 @@ class SpriteViewer:
         self.mirror_z_check.deselect()
         self.mirror_z_check.configure(state=DISABLED)
         self.delete_button.configure(state=DISABLED)
+        self.clone_button.configure(state=DISABLED)
         self._selected_idx = i
         self._point_controls_locked = False
 
     def get_cur_rot_frame(self) -> int:
-        if self._mode == _MODE_STATION or self._rot_slider is None:
+        if self._mode == _MODE_STATION:
             return 0
         else:
-            return int(self._rot_slider.get())
+            return int(self._ui_rot.get())
         
     def refresh_polar_point_info(self):
         selected_index = self.points_listbox.curselection()
@@ -546,6 +446,7 @@ class SpriteViewer:
         self.mirror_z_check.configure(state=NORMAL if point.mirror_support.z else DISABLED)
 
         self.delete_button.configure(state=NORMAL)
+        self.clone_button.configure(state=NORMAL)
         self._point_controls_locked = False
 
     def select_point(self, event: Event):
@@ -841,20 +742,48 @@ class SpriteViewer:
             self.set_current_point_controls()
         self.display_sprite()
 
+    def clone_point(self):
+        if self._point_controls_locked:
+            return
+        #the index is actually a tuple of all selected items in the list
+        #but our list only selects 1 so it doesnt matter
+        selected_index = self.points_listbox.curselection()
+        if not selected_index:
+            i = self._selected_idx
+            if i >= 0:
+                self.points_listbox.select_set(self._selected_idx)
+        else:
+            #we can only edit one at a time, so we only take the first
+            i = selected_index[0]
+        if i < 0:
+            return
+
+        self.reset_point_controls()
+
+        point = deepcopy(self._points[i])
+        self._points.insert(i+1, point)
+        self.points_listbox.insert(i+1, str(point))
+
+        self._selected_idx = i + 1
+        self.points_listbox.select_set(i+1)
+
+        self.set_current_point_controls()
+        self.display_sprite()
+
     def refresh_main_window(self):
         #reset collected points
         self._points = []
         self.points_listbox.delete(0, END)
 
-        #reset sliders
-        if self._anim_slider:
-            self._anim_slider.set(0)
-            num_anim_frames = self._sprite_cfg.anim_frames
-            self._anim_slider.configure(from_=0, to=num_anim_frames, state=NORMAL if num_anim_frames else DISABLED)
-        if self._rot_slider:
-            self._rot_slider.set(0)
-            num_rot_frames = self._sprite_cfg.rot_frames - 1
-            self._rot_slider.configure(from_=0, to=num_rot_frames, state=NORMAL if num_rot_frames else DISABLED)
+        #reset frame sliders
+        self._ui_anim.set(0)
+        num_anim_frames = self._sprite_cfg.anim_frames
+        self._ui_anim.update_min_max(0, num_anim_frames)
+        self._ui_anim.set_state(NORMAL if num_anim_frames else DISABLED)
+        self._ui_rot.set(0)
+        num_rot_frames = self._sprite_cfg.rot_frames - 1
+        self._ui_rot.update_min_max(0, num_rot_frames)
+        self._ui_rot.set_state(NORMAL if num_rot_frames else DISABLED)
 
         #reset point editing
         self.reset_point_controls()
