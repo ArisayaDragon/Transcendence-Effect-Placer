@@ -10,6 +10,7 @@ _MIN_ZG = 0.1
 _D = 2.0
 _MIN_DEN = 0.1
 EPSILON = 1e-10
+TRANSCENDENCE_POLAR_OFFSET = 90 #polar offset in degrees
 
 def convert_polar_to_projection(sprite_cfg: SpriteConfig, coord: PCoord) -> ICoord:
     scale = sprite_cfg.viewport_size()

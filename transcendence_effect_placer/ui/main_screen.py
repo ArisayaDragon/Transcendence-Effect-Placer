@@ -15,7 +15,7 @@ from copy import deepcopy
 from transcendence_effect_placer.common.validation import validate_numeral, validate_numeral_non_negative, validate_null
 from transcendence_effect_placer.data.data import SpriteConfig, CCoord, ICoord, PCoord
 from transcendence_effect_placer.data.points import Point, PointGeneric, PointDevice, PointDock, PointThuster, PointType, PT_DEVICE, PT_DOCK, PT_GENERIC, PT_THRUSTER, SpriteCoord, PILCoord
-from transcendence_effect_placer.data.math import a_d, d180, d360
+from transcendence_effect_placer.data.math import a_d, d180, d360, TRANSCENDENCE_POLAR_OFFSET
 from transcendence_effect_placer.ui.load_file import SpriteOpener
 from transcendence_effect_placer.ui.sprite_settings import SpriteSettingsDialogue
 from transcendence_effect_placer.ui.elements.slider_entry import SliderEntryUI
@@ -28,8 +28,6 @@ RED = "#FF0000"
 BLACK = "#000000"
 
 SV_WRITE = "write"
-
-TRANSCENDENCE_ANGULAR_OFFSET = 90
 
 class SpriteMode(str): pass
 
@@ -339,7 +337,7 @@ class SpriteViewer:
 
         point: Point = self._points[i]
         polar = point.polar_coord
-        a = d180(math.degrees(polar.a) + TRANSCENDENCE_ANGULAR_OFFSET)
+        a = -d180(math.degrees(polar.a) + TRANSCENDENCE_POLAR_OFFSET)
         r = round(polar.r)
         self._ui_a.set(a)
         self._ui_r.set(r)
@@ -549,7 +547,8 @@ class SpriteViewer:
             return
         
         a = int(as_)
-        a -= TRANSCENDENCE_ANGULAR_OFFSET
+        a += TRANSCENDENCE_POLAR_OFFSET
+        a = -d180(a)
         ar = math.radians(a)
         r = int(rs)
         z = int(zs)

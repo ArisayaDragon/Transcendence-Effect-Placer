@@ -5,7 +5,7 @@ from PIL.ImageDraw import ImageDraw
 from dataclasses import dataclass
 
 from transcendence_effect_placer.data.data import SpriteConfig, CCoord, ICoord, PCoord
-from transcendence_effect_placer.data.math import convert_polar_to_projection, convert_projection_to_polar, a_d, d180, d360
+from transcendence_effect_placer.data.math import convert_polar_to_projection, convert_projection_to_polar, a_d, d180, d360, TRANSCENDENCE_POLAR_OFFSET
 
 @dataclass
 class MirrorOptions:
@@ -348,7 +348,7 @@ class PointThuster(Point):
         a = a_d(self.polar_coord.a)
         r = round(self.polar_coord.r)
         direction = self.direction
-        a = round(d180(self._mirror_angle_degrees(a, mirror) + 90))
+        a = round(-d180(self._mirror_angle_degrees(a, mirror) + TRANSCENDENCE_POLAR_OFFSET))
         direction = round(d180(self._mirror_angle_degrees(direction, mirror, False)))
         if mirror.z:
             z *= -1
@@ -504,7 +504,7 @@ class PointDevice(Point):
         a = a_d(self.polar_coord.a)
         r = round(self.polar_coord.r)
         direction = self.direction
-        a = round(d180(self._mirror_angle_degrees(a, mirror) + 90))
+        a = round(-d180(self._mirror_angle_degrees(a, mirror) + TRANSCENDENCE_POLAR_OFFSET))
         direction = round(d180(self._mirror_angle_degrees(direction, mirror, False)))
         if mirror.z:
             z *= -1
