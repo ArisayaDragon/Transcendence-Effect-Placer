@@ -282,7 +282,9 @@ class SpriteViewer:
         self._ui_r.update_min_max(0, max(self._sprite_cfg.h, self._sprite_cfg.w))
 
     def reset_point_controls(self):
-        self._point_controls_locked = True
+        locked = self._point_controls_locked
+        if not locked:
+            self._point_controls_locked = True
         i = self._selected_idx
         self._selected_idx = -1
         self.sv_point_type.set(PT_GENERIC)
@@ -316,7 +318,8 @@ class SpriteViewer:
         self.delete_button.configure(state=DISABLED)
         self.clone_button.configure(state=DISABLED)
         self._selected_idx = i
-        self._point_controls_locked = False
+        if not locked:
+            self._point_controls_locked = False
 
     def get_cur_rot_frame(self) -> int:
         if self._mode == _MODE_STATION:
@@ -363,7 +366,6 @@ class SpriteViewer:
 
         #print(i, type(point), pt, x, y, a, r, z)
         self.set_point_control_limits()
-        self.reset_point_controls()
 
         self.sv_point_type.set(pt)
         self.point_type_device.configure(state = NORMAL)
