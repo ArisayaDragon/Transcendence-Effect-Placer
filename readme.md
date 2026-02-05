@@ -11,7 +11,7 @@ This placement data can then be exported to XML, the contents of which can then 
 
 As this is a python program, is is possible to run it directly out of the repo by running `python transcendence_effect_placer.py`
 
-However prepackaged executables are provided in the release section of this repo for your convenience.
+However, prepackaged executables are provided in the release section of this repo for your convenience: https://github.com/ArisayaDragon/Transcendence-Effect-Placer/releases
 
 ### Usage
 
@@ -59,6 +59,6 @@ Requirements:
 1. Clone this repo
 2. run __venv_init.bat
 3. run _venv_start.bat
-4. run install_deps.bat
+4. run install_requirements.bat
 5. run build.bat
 6. your executable will be available in the `build` directory!
