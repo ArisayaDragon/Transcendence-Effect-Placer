@@ -1,1 +1,1 @@
-pyinstaller -F transcendence_effect_placer.py
+pyinstaller -F transcendence_effect_placer.py --version-file=resources/win/version.rc
