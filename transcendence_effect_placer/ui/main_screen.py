@@ -69,6 +69,7 @@ class SpriteViewer:
         self._selected_idx: int = -1
         self._point_controls_locked: bool = False
         self._xml_saver = XMLSaver(root)
+        self._next_point: int = 0
         self._init_wnd()
         self.load_image()
 
@@ -677,10 +678,11 @@ class SpriteViewer:
         if self._point_controls_locked:
             return
         coord = PILCoord(event.x, event.y)
-        point = PointGeneric(coord, str(len(self._points)), self._sprite_cfg, self.get_cur_rot_frame())
+        point = PointGeneric(coord, str(self._next_point), self._sprite_cfg, self.get_cur_rot_frame())
         self._points.append(point)
         self.points_listbox.insert(END, str(point))
         self._selected_idx = len(self._points) - 1
+        self._next_point += 1
         self.set_current_point_controls()
         self.display_sprite()
 
@@ -752,6 +754,7 @@ class SpriteViewer:
         #reset collected points
         self._points = []
         self.points_listbox.delete(0, END)
+        self._next_point: int = 0
 
         #reset frame sliders
         self._ui_anim.set(0)
