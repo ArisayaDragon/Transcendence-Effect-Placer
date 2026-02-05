@@ -19,7 +19,7 @@ def convert_polar_to_projection(sprite_cfg: SpriteConfig, coord: PCoord) -> ICoo
 
     x = math.cos(a) * r / scale
     y = math.sin(a) * r / scale
-    z = coord.z / scale
+    z = -coord.z / scale
 
     #global coordinate conversion
 
@@ -113,7 +113,7 @@ def convert_projection_to_polar_original(sprite_cfg: SpriteConfig, coord: CCoord
 
     px = coord.x
     py = coord.y
-    pz = coord.z
+    pz = -coord.z
 
     z = min(pz, -2 * py) / scale
     d = _D * scale

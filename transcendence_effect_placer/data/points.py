@@ -44,11 +44,11 @@ class SpriteCoord(ICoord):
     def to_PIL(self, cfg: SpriteConfig):
         return PILCoord(-self.x + cfg.w//2, self.y + cfg.h//2)
     def to_gscene(self, z: float=0):
-        return GSceneCoord(self.x, self.y, z)
+        return GSceneCoord(self.x, -self.y, z)
     
 class GSceneCoord(CCoord):
     def to_sprite(self):
-        return SpriteCoord(round(self.x), round(self.y))
+        return SpriteCoord(round(self.x), -round(self.y))
     def to_polar_XML(self, cfg: SpriteConfig = DEFAULT_CFG, facing: int = 0):
         '''
         Converting projection to polar is buggy due to trignometry edgecases
@@ -109,7 +109,6 @@ class Point(ABC):
         return ICoord(coord.x, -coord.y)
 
     def update_from_polar(self, coord: PXMLCoord|PCoord):
-        '''Not recommended, because roundoff can cause the sprite x and y to move'''
         self.polar_coord = coord if isinstance(coord, PXMLCoord) else PXMLCoord(coord.a, coord.r, coord.z)
         self.scene_coord = self.polar_coord.to_gscene(self._cfg)
         self.sprite_coord = self.scene_coord.to_sprite()
@@ -145,17 +144,14 @@ class Point(ABC):
         self._update()
 
     def set_radius(self, radius: float = 0.0):
-        '''Not recommended, because roundoff can cause the sprite x and y to move'''
         self.polar_coord.r = radius
         self.update_from_polar(self.polar_coord)
 
     def set_pos_angle(self, pos_angle: float = 0.0):
-        '''Not recommended, because roundoff can cause the sprite x and y to move'''
         self.polar_coord.r = pos_angle
         self.update_from_polar(self.polar_coord)
 
     def set_pos_angle_deg(self, pos_angle_degrees: float = 0.0):
-        '''Not recommended, because roundoff can cause the sprite x and y to move'''
         self.polar_coord.r = math.radians(pos_angle_degrees)
         self.update_from_polar(self.polar_coord)
 
@@ -189,8 +185,8 @@ class Point(ABC):
         return degrees
 
     def get_projection_coord_at_direction(self, direction: int = 0, mirror: MirrorOptions = MIRROR_NULL) -> ICoord:
-        adj_dir_deg = math.degrees(self.polar_coord.a)
-        adj_dir_deg = self._mirror_angle_degrees(adj_dir_deg, mirror) - direction % 360
+        adj_dir_deg = math.degrees(self.polar_coord.a) + 180
+        adj_dir_deg = self._mirror_angle_degrees(adj_dir_deg, mirror) + direction % 360
         adj_dir = math.radians(adj_dir_deg)
         adj_rad = self.polar_coord.r
         adj_z = self.polar_coord.z * (-1 if mirror.z else 1)
