@@ -37,7 +37,7 @@ def convert_polar_to_projection(sprite_cfg: SpriteConfig, coord: PCoord) -> ICoo
     return CCoord(xg / den, yg / den, coord.z) #z here would be coord.z, not zg or z, since we do this transform bidirectionally with user-supplied coord.z
 
 def convert_projection_to_polar(sprite_cfg: SpriteConfig, coord: CCoord|ICoord, rotation_frame: int = 0) -> PCoord:
-    return convert_projection_to_polar_original(sprite_cfg, coord, rotation_frame)
+    return convert_projection_to_polar_approx_ingest(sprite_cfg, coord, rotation_frame)
 
 def convert_projection_to_polar_inverse(sprite_cfg: SpriteConfig, coord: CCoord|ICoord, rotation_frame: int = 0) -> PCoord:
     '''
@@ -146,6 +146,30 @@ def convert_projection_to_polar_original(sprite_cfg: SpriteConfig, coord: CCoord
     print("y", py, y, yg, "\tz", pz, z, "\tx", px, x, "\tpolar", int(math.degrees(a)), round(r))
 
     ad = round(math.degrees(a))
+    return PCoord(a, r, coord.z) #we store the original z pos here to fix the case where pz is too high
+
+def convert_projection_to_polar_approx_ingest(sprite_cfg: SpriteConfig, coord: CCoord|ICoord, rotation_frame: int = 0) -> PCoord:
+    '''
+    This version is designed to have simple math that puts a point in approximately the right place
+    It assumes that z = 0 and simply passes the z-pos through if one exists
+    The purpose of this function is to be used when adding new points, not when editing a point
+    '''
+    if isinstance(coord, ICoord):
+        coord = CCoord(float(coord.x), float(coord.y), 0)
+    scale = sprite_cfg.viewport_size()
+
+    rotation_offset = rotation_frame * (360 / sprite_cfg.rot_frames)
+
+    px = coord.x
+    py = coord.y
+    pz = -coord.z
+
+    a = math.atan2(py, px) + math.radians(rotation_offset)
+    r = (px*px + py*py) ** 0.5
+    ad = round(math.degrees(a))
+
+    print("y", py, "\tz", pz, "\tx", px, "\tpolar", ad, round(r))
+
     return PCoord(a, r, coord.z) #we store the original z pos here to fix the case where pz is too high
 
     
