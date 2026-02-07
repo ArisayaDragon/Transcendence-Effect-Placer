@@ -51,10 +51,17 @@ class SliderEntryUI:
         self._state = state
 
     def set(self, v: int|float):
+        is_disabled = self._state == DISABLED
+        if is_disabled:
+            self.enable()
         v = max(self._min, min(self._max, v))
         self._slider.set(v)
-        self._var.set(str(v))
+        s = str(v)
+        self._var.set(s)
+        print(f"v: {self._slider.get()} vs {v}, s: {self._var.get()} vs {s}, disabled: {is_disabled}")
         self._entry.configure(fg=BLACK)
+        if is_disabled:
+            self.disable()
 
     def get(self):
         return float(self.value)
@@ -75,15 +82,10 @@ class SliderEntryUI:
         valid = self._validation(s)
         if valid:
             v = float(s)
-            v = max(min_, min(max_, v))
-            self._slider.set(v)
-            self._var.set(str(v))
-            self._entry.configure(fg=BLACK)
+            self.set(v)
         else:
             v = min_
-            self._slider.set(v)
-            self._var.set(str(v))
-            self._entry.configure(fg=BLACK)
+            self.set(v)
 
     def reset(self):
         self.set((self._max + self._min) / 2)
@@ -95,28 +97,27 @@ class SliderEntryUI:
         self.set(self._max)
 
     def _trace_cb(self, var_name, index, mode):
-        if self._state == DISABLED: return
         s = self._var.get()
         valid = self._validation(s)
         if valid:
             v = float(s)
-            #we dont update var to this value because it can mess up someone typing in something
             if v > self._max:
                 s = str(self._max)
             elif v < self._min:
                 s = str(self._min)
             self._entry.configure(fg=BLACK) 
-            self._slider.set(int(s))
+            v = int(s)
+            self.set(v)
             self.value = s
             self._cb(None) #must do a general validation check on all inputs, in event a bad input was left elsewhere
         elif not valid:
             self._entry.configure(fg=RED)
+
     def _slider_cb(self, _:str):
-        if self._state == DISABLED: return
         v = self._slider.get()
         s = str(v)
-        self._var.set(s)
         self.value = s
+        self.set(v)
         self._entry.configure(fg=BLACK) 
         self._cb(None)
 
