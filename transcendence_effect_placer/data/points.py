@@ -142,7 +142,7 @@ class Point(ABC):
             if best_point is self.polar_coord:
                 break
             else:
-                print(f"nudging from: {self.polar_coord} to: {best_point} at {best_s} - Target: {coord} which is {best_distance ** 0.5} away")
+                #print(f"nudging from: {self.polar_coord} to: {best_point} at {best_s} - Target: {coord} which is {best_distance ** 0.5} away")
                 self.update_from_polar(best_point)
 
     def update_from_polar(self, coord: PXMLCoord|PCoord):

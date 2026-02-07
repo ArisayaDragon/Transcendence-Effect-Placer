@@ -58,7 +58,7 @@ class SliderEntryUI:
         self._slider.set(v)
         s = str(v)
         self._var.set(s)
-        print(f"v: {self._slider.get()} vs {v}, s: {self._var.get()} vs {s}, disabled: {is_disabled}")
+        #print(f"v: {self._slider.get()} vs {v}, s: {self._var.get()} vs {s}, disabled: {is_disabled}")
         self._entry.configure(fg=BLACK)
         if is_disabled:
             self.disable()
