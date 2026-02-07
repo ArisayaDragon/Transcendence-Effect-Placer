@@ -92,12 +92,17 @@ class Point(ABC):
             if not sprite_cfg.real:
                 raise ValueError("must provide a real sprite configuration when creating a point")
             self.label = label
-            self.sprite_coord: SpriteCoord = coord.to_sprite(sprite_cfg) if isinstance(coord, PILCoord) else coord
+            sprite_coord = coord.to_sprite(sprite_cfg) if isinstance(coord, PILCoord) else coord
+            self.sprite_coord = sprite_coord
             self.scene_coord: GSceneCoord = self.sprite_coord.to_gscene()
             self._cfg = sprite_cfg
             self.polar_coord: PXMLCoord = self.scene_coord.to_polar_XML(self._cfg, rot_frame)
             self.scene_coord = self.polar_coord.to_gscene(self._cfg)
+            self.sprite_coord = self.scene_coord.to_sprite()
             self.mirror = MirrorOptions()
+            if isinstance(coord, PILCoord):
+                #attempt to nudge the point closer to where the user clicked on the screen
+                self.nudge_to(sprite_coord)
 
     def __str__(self):
         return f"{self.point_type}: ({self.sprite_coord.x},{self.sprite_coord.y}) z={self.scene_coord.z}"
@@ -107,6 +112,38 @@ class Point(ABC):
     
     def _from_raw_coord(self, coord: ICoord) -> ICoord:
         return ICoord(coord.x, -coord.y)
+    
+    def nudge_to(self, coord: SpriteCoord):
+        while True:
+            in_ = PXMLCoord(self.polar_coord.a, self.polar_coord.r - 1, self.polar_coord.z)
+            out_ = PXMLCoord(self.polar_coord.a, self.polar_coord.r + 1, self.polar_coord.z)
+            d1 = math.radians(1)
+            ccw_ = PXMLCoord(self.polar_coord.a + d1, self.polar_coord.r, self.polar_coord.z)
+            cw_ = PXMLCoord(self.polar_coord.a - d1, self.polar_coord.r, self.polar_coord.z)
+            in_s = in_.to_gscene(self._cfg).to_sprite()
+            out_s = out_.to_gscene(self._cfg).to_sprite()
+            ccw_s = ccw_.to_gscene(self._cfg).to_sprite()
+            cw_s = cw_.to_gscene(self._cfg).to_sprite()
+            cur_s = self.sprite_coord
+            def dist2(src_coord: SpriteCoord):
+                x = coord.x - src_coord.x
+                y = coord.y - src_coord.y
+                return x ** 2 + y ** 2
+            best_distance = dist2(cur_s)
+            best_point: PXMLCoord = self.polar_coord
+            best_s = cur_s
+            for pxml, spr_s in [(in_, in_s), (out_, out_s), (ccw_, ccw_s), (cw_, cw_s)]:
+                test_dist = dist2(spr_s)
+                if test_dist < best_distance:
+                    best_distance = test_dist
+                    best_point = pxml
+                    best_s = spr_s
+            # if we are done...
+            if best_point is self.polar_coord:
+                break
+            else:
+                print(f"nudging from: {self.polar_coord} to: {best_point} at {best_s} - Target: {coord} which is {best_distance ** 0.5} away")
+                self.update_from_polar(best_point)
 
     def update_from_polar(self, coord: PXMLCoord|PCoord):
         self.polar_coord = coord if isinstance(coord, PXMLCoord) else PXMLCoord(coord.a, coord.r, coord.z)
