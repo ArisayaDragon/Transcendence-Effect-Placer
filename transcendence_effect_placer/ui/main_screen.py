@@ -20,6 +20,7 @@ from transcendence_effect_placer.ui.load_file import SpriteOpener
 from transcendence_effect_placer.ui.sprite_settings import SpriteSettingsDialogue
 from transcendence_effect_placer.ui.elements.slider_entry import SliderEntryUI
 from transcendence_effect_placer.ui.save_file import XMLSaver
+from transcendence_effect_placer.common.lockable_ui import LockableUI
 
 #set PIL max pixels
 Image.MAX_IMAGE_PIXELS = 2 ** 34 #this is 2**36, which is 64GB - should be plenty big for current transcendence ships
@@ -51,7 +52,7 @@ class MainMenuBar:
 
         self._root.config(menu=menubar)
         
-class SpriteViewer:
+class SpriteViewer (LockableUI):
     def __init__(self, root: Tk):
         self._root = root
         self._image_path: str|None = None
@@ -279,10 +280,8 @@ class SpriteViewer:
         self._ui_a.update_min_max(-179, 180)
         self._ui_r.update_min_max(0, max(self._sprite_cfg.h, self._sprite_cfg.w))
 
+    @LockableUI._takes_lock
     def reset_point_controls(self):
-        locked = self._point_controls_locked
-        if not locked:
-            self._point_controls_locked = True
         i = self._selected_idx
         self._selected_idx = -1
         self.sv_point_type.set(PT_GENERIC)
@@ -316,8 +315,6 @@ class SpriteViewer:
         self.delete_button.configure(state=DISABLED)
         self.clone_button.configure(state=DISABLED)
         self._selected_idx = i
-        if not locked:
-            self._point_controls_locked = False
 
     def get_cur_rot_frame(self) -> int:
         if self._mode == _MODE_STATION:
@@ -342,8 +339,8 @@ class SpriteViewer:
         self._ui_a.set(a)
         self._ui_r.set(r)
 
+    @LockableUI._takes_lock
     def set_current_point_controls(self):
-        self._point_controls_locked = True
         selected_index = self.points_listbox.curselection()
         if not selected_index:
             i = self._selected_idx
@@ -426,7 +423,6 @@ class SpriteViewer:
 
         self.delete_button.configure(state=NORMAL)
         self.clone_button.configure(state=NORMAL)
-        self._point_controls_locked = False
 
     def select_point(self, event: Event):
         #the index is actually a tuple of all selected items in the list
@@ -438,9 +434,8 @@ class SpriteViewer:
         self.reset_point_controls()
         self.set_current_point_controls()
 
+    @LockableUI._no_lock
     def update_point(self, event: Event|None = None):
-        if self._point_controls_locked:
-            return
         #the index is actually a tuple of all selected items in the list
         #but our list only selects 1 so it doesnt matter
         selected_index = self.points_listbox.curselection()
@@ -493,9 +488,8 @@ class SpriteViewer:
         #self.set_current_point_controls()
         self.display_sprite()
 
+    @LockableUI._no_lock
     def update_point_z(self, event: Event|None = None):
-        if self._point_controls_locked:
-            return
         #the index is actually a tuple of all selected items in the list
         #but our list only selects 1 so it doesnt matter
         selected_index = self.points_listbox.curselection()
@@ -513,9 +507,8 @@ class SpriteViewer:
         else:
             self.update_point(event)
 
+    @LockableUI._no_lock
     def update_point_polar(self, event: Event|None = None):
-        if self._point_controls_locked:
-            return
         #the index is actually a tuple of all selected items in the list
         #but our list only selects 1 so it doesnt matter
         selected_index = self.points_listbox.curselection()
@@ -570,10 +563,8 @@ class SpriteViewer:
         #self.set_current_point_controls()
         self.display_sprite()
 
-
+    @LockableUI._no_lock
     def update_point_arcs(self, event: Event|None = None):
-        if self._point_controls_locked:
-            return
         #the index is actually a tuple of all selected items in the list
         #but our list only selects 1 so it doesnt matter
         selected_index = self.points_listbox.curselection()
@@ -618,9 +609,8 @@ class SpriteViewer:
         #self.set_current_point_controls()
         self.display_sprite()
 
+    @LockableUI._no_lock
     def update_point_mirror(self, event: Event|None = None):
-        if self._point_controls_locked:
-            return
         #the index is actually a tuple of all selected items in the list
         #but our list only selects 1 so it doesnt matter
         selected_index = self.points_listbox.curselection()
@@ -675,10 +665,12 @@ class SpriteViewer:
         self.set_current_point_controls()
         self.display_sprite()
 
+    @LockableUI._no_lock
     def add_point(self, event: Event[Label]):
-        if self._point_controls_locked:
-            return
-        coord = PILCoord(event.x, event.y)
+        x = event.x
+        y = event.y
+        print('Placing coord at: ', x, y)
+        coord = PILCoord(x, y)
         point = PointGeneric(coord, str(self._next_point), self._sprite_cfg, self.get_cur_rot_frame())
         self._points.append(point)
         self.points_listbox.insert(END, str(point))
@@ -687,9 +679,8 @@ class SpriteViewer:
         self.set_current_point_controls()
         self.display_sprite()
 
+    @LockableUI._no_lock
     def delete_point(self):
-        if self._point_controls_locked:
-            return
         #the index is actually a tuple of all selected items in the list
         #but our list only selects 1 so it doesnt matter
         selected_index = self.points_listbox.curselection()
@@ -722,10 +713,8 @@ class SpriteViewer:
         if self._selected_idx >= 0:
             self.set_current_point_controls()
         self.display_sprite()
-
+    
     def clone_point(self):
-        if self._point_controls_locked:
-            return
         #the index is actually a tuple of all selected items in the list
         #but our list only selects 1 so it doesnt matter
         selected_index = self.points_listbox.curselection()
@@ -781,3 +770,4 @@ class SpriteViewer:
         
         if self._image_display:
             self._image_display.config(image=self._sprite_image)
+    
